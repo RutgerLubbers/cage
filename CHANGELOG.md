@@ -7,6 +7,7 @@
 - Rule resolution system with conflict detection for allow/deny rules
 
 ### Fixed
+- **Critical**: Fix duplicate deny rules in `--dry-run` output and sandbox profiles. `AccessReadWrite` deny rules were incorrectly appearing twice due to faulty conditional logic in rule resolution and profile generation.
 - **macOS**: Use `file-read-data` instead of `file-read*` for deny rules to allow `stat`/`lstat` operations while still blocking file content reads. This fixes compatibility with Node.js/npm which need metadata access for path resolution.
 - **Linux**: Update sandbox files to use new SandboxConfig structure with ReadRules/WriteRules
 - Suppress noisy `--allow-git` warning when not in a git repository (expected case)

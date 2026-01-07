@@ -478,7 +478,7 @@ func TestRuleResolver_Resolve(t *testing.T) {
 				r.AddDenyRule("/readwrite/path", []string{}, source) // AccessReadWrite
 			},
 			expectedWriteRules: 2, // write/path + readwrite/path
-			expectedReadRules:  2, // read/path + readwrite/path
+			expectedReadRules:  1, // read/path only (readwrite/path should NOT be in readRules after fix)
 			expectedConflicts:  0,
 		},
 	}
@@ -856,6 +856,145 @@ func TestCleanPath(t *testing.T) {
 			result := cleanPath(tt.input)
 			if !tt.validate(result) {
 				t.Errorf("cleanPath(%q) = %q, validation failed", tt.input, result)
+			}
+		})
+	}
+}
+
+// Layer 1: Rule Resolution Tests (testing the bug in rules.go)
+
+func TestDenyRuleWithReadWriteAppearsInBothLists(t *testing.T) {
+	resolver := NewRuleResolver()
+
+	// Add a deny rule (uses AccessReadWrite by default)
+	source := RuleSource{PresetName: "test-preset"}
+	resolver.AddDenyRule("/Users/test", []string{}, source)
+
+	writeRules, readRules, _ := resolver.Resolve()
+
+	// Find the deny rule in writeRules
+	var foundInWrite *ResolvedRule
+	for i, rule := range writeRules {
+		if rule.Action == ActionDeny && rule.Path == "/Users/test" {
+			foundInWrite = &writeRules[i]
+			break
+		}
+	}
+
+	// Find the deny rule in readRules
+	var foundInRead *ResolvedRule
+	for i, rule := range readRules {
+		if rule.Action == ActionDeny && rule.Path == "/Users/test" {
+			foundInRead = &readRules[i]
+			break
+		}
+	}
+
+	// Assertions - After fix: should ONLY be in writeRules
+	if foundInWrite == nil {
+		t.Fatal("Deny rule should be in writeRules")
+	}
+	if foundInRead != nil {
+		t.Fatal("After fix: AccessReadWrite deny rule should NOT be in readRules")
+	}
+
+	// Verify the rule in writeRules has correct mode
+	if foundInWrite.Mode != AccessReadWrite {
+		t.Errorf("Expected AccessReadWrite in writeRules, got %v", foundInWrite.Mode)
+	}
+
+	t.Log("✅ FIX VERIFIED: AccessReadWrite deny rule appears ONLY in writeRules (not in readRules)")
+}
+
+func TestDenyRuleWithReadOnlyAppearsInReadListOnly(t *testing.T) {
+	resolver := NewRuleResolver()
+
+	// Create a read-only rule using AddReadRule and then verify where it appears
+	source := RuleSource{PresetName: "test-preset"}
+	resolver.AddReadRule("/Users/test", source)
+
+	writeRules, readRules, _ := resolver.Resolve()
+
+	// Check writeRules - should NOT contain this rule (since it's AccessRead, not AccessWrite)
+	foundInWrite := false
+	for _, rule := range writeRules {
+		if rule.Path == "/Users/test" {
+			foundInWrite = true
+			break
+		}
+	}
+
+	// Check readRules - should contain this rule
+	foundInRead := false
+	for _, rule := range readRules {
+		if rule.Path == "/Users/test" {
+			foundInRead = true
+			break
+		}
+	}
+
+	if foundInWrite {
+		t.Error("Pure read rule should NOT be in writeRules")
+	}
+	if !foundInRead {
+		t.Error("Pure read rule should be in readRules")
+	}
+}
+
+func TestResolveConditionLogic(t *testing.T) {
+	testCases := []struct {
+		name             string
+		mode             AccessMode
+		shouldBeInWrite  bool
+		shouldBeInRead   bool
+		currentReadLogic bool // What current code does
+		correctReadLogic bool // What it should do
+	}{
+		{
+			name:             "AccessRead (pure read)",
+			mode:             AccessRead,
+			shouldBeInWrite:  false,
+			shouldBeInRead:   true,
+			currentReadLogic: true, // key.mode&AccessRead != 0 && key.mode != AccessWrite
+			correctReadLogic: true, // key.mode == AccessRead
+		},
+		{
+			name:             "AccessWrite (pure write)",
+			mode:             AccessWrite,
+			shouldBeInWrite:  true,
+			shouldBeInRead:   false,
+			currentReadLogic: false, // key.mode&AccessRead != 0 is false
+			correctReadLogic: false, // key.mode == AccessRead is false
+		},
+		{
+			name:             "AccessReadWrite (read+write)",
+			mode:             AccessReadWrite,
+			shouldBeInWrite:  true,
+			shouldBeInRead:   false, // Should NOT be in readRules
+			currentReadLogic: true,  // BUG: key.mode&AccessRead != 0 && key.mode != AccessWrite is TRUE
+			correctReadLogic: false, // key.mode == AccessRead is false
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Test current condition: key.mode&AccessRead != 0 && key.mode != AccessWrite
+			currentResult := (tc.mode&AccessRead != 0) && (tc.mode != AccessWrite)
+
+			// Test correct condition: key.mode == AccessRead
+			correctResult := tc.mode == AccessRead
+
+			if tc.currentReadLogic != currentResult {
+				t.Errorf("Current condition evaluation: expected %v, got %v", tc.currentReadLogic, currentResult)
+			}
+			if tc.correctReadLogic != correctResult {
+				t.Errorf("Correct condition evaluation: expected %v, got %v", tc.correctReadLogic, correctResult)
+			}
+
+			if tc.name == "AccessReadWrite (read+write)" {
+				if currentResult == correctResult {
+					t.Error("BUG: Current and correct logic should differ for AccessReadWrite")
+				}
 			}
 		})
 	}

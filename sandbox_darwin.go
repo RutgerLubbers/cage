@@ -60,9 +60,13 @@ func generateSandboxProfile(config *SandboxConfig) (string, error) {
 	for _, rule := range config.WriteRules {
 		if rule.Action == ActionDeny {
 			emitDenyRule(&profile, rule, AccessWrite)
-			if rule.Mode&AccessRead != 0 {
-				emitDenyRule(&profile, rule, AccessRead)
-			}
+		}
+	}
+
+	// Emit read denies for AccessReadWrite rules (applies in all modes)
+	for _, rule := range config.WriteRules {
+		if rule.Action == ActionDeny && rule.Mode&AccessRead != 0 {
+			emitDenyRule(&profile, rule, AccessRead)
 		}
 	}
 
@@ -96,7 +100,7 @@ func generateSandboxProfile(config *SandboxConfig) (string, error) {
 		// Allow reading root directory - required for process startup and path resolution
 		profile.WriteString("(allow file-read-data (literal \"/\"))\n")
 
-		// Emit read deny rules
+		// Emit read deny rules from ReadRules (for pure read denies in strict mode)
 		for _, rule := range config.ReadRules {
 			if rule.Action == ActionDeny {
 				emitDenyRule(&profile, rule, AccessRead)

@@ -46,8 +46,10 @@ func showDryRun(config *SandboxConfig) error {
 			}
 		}
 
-		// Show deny rules
+		// Show deny rules (collect from both WriteRules and ReadRules without duplicates)
 		hasDenyRules := false
+		seenDenyPaths := make(map[string]bool)
+
 		for _, rule := range config.WriteRules {
 			if rule.Action == ActionDeny {
 				if !hasDenyRules {
@@ -55,11 +57,12 @@ func showDryRun(config *SandboxConfig) error {
 					fmt.Println("- Deny rules:")
 					hasDenyRules = true
 				}
+				seenDenyPaths[rule.Path] = true
 				printDenyRule(rule)
 			}
 		}
 		for _, rule := range config.ReadRules {
-			if rule.Action == ActionDeny {
+			if rule.Action == ActionDeny && !seenDenyPaths[rule.Path] {
 				if !hasDenyRules {
 					fmt.Println()
 					fmt.Println("- Deny rules:")

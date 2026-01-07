@@ -240,3 +240,112 @@ func TestEmitDenyRule_ReadUsesFileReadData(t *testing.T) {
 		})
 	}
 }
+
+// Layer 2: Sandbox Profile Generation Tests (testing duplication in generateSandboxProfile)
+
+func TestSandboxProfileDuplicateDenyInStrictMode(t *testing.T) {
+	resolver := NewRuleResolver()
+
+	// Add a deny rule with exceptions
+	resolver.AddDenyRule("/Users/test", []string{
+		"/Users/test/.bashrc",
+		"/Users/test/.zshrc",
+	}, RuleSource{PresetName: "builtin:secure"})
+
+	writeRules, readRules, _ := resolver.Resolve()
+
+	config := &SandboxConfig{
+		WriteRules: writeRules,
+		ReadRules:  readRules,
+		Strict:     true, // Important: strict mode processes readRules
+	}
+
+	profile, err := generateSandboxProfile(config)
+	if err != nil {
+		t.Fatalf("generateSandboxProfile failed: %v", err)
+	}
+
+	// Count occurrences of write deny
+	writeDenyCount := strings.Count(profile, `(deny file-write* (subpath "/Users/test"))`)
+	if writeDenyCount != 1 {
+		t.Errorf("Write deny should appear exactly once, got %d", writeDenyCount)
+	}
+
+	// Count occurrences of read deny - THIS IS WHERE THE BUG SHOWS
+	readDenyCount := strings.Count(profile, `(deny file-read-data (subpath "/Users/test"))`)
+
+	t.Logf("Read deny appears %d times", readDenyCount)
+
+	if readDenyCount == 2 {
+		t.Log("BUG CONFIRMED: Read deny appears twice in sandbox profile")
+		t.Log("Once from writeRules iteration (line 64)")
+		t.Log("Once from readRules iteration (line 102)")
+	}
+
+	// This assertion will FAIL, confirming the bug
+	if readDenyCount != 1 {
+		t.Errorf("Read deny should appear exactly once (currently fails - BUG), got %d", readDenyCount)
+	}
+}
+
+func TestSandboxProfileNoDuplicateWithoutStrictMode(t *testing.T) {
+	resolver := NewRuleResolver()
+	resolver.AddDenyRule("/Users/test", []string{},
+		RuleSource{PresetName: "builtin:secure"})
+
+	writeRules, readRules, _ := resolver.Resolve()
+
+	config := &SandboxConfig{
+		WriteRules: writeRules,
+		ReadRules:  readRules,
+		Strict:     false, // No strict mode - readRules not processed
+	}
+
+	profile, err := generateSandboxProfile(config)
+	if err != nil {
+		t.Fatalf("generateSandboxProfile failed: %v", err)
+	}
+
+	// Count occurrences
+	readDenyCount := strings.Count(profile, `(deny file-read-data (subpath "/Users/test"))`)
+
+	// Should only appear once (from writeRules)
+	if readDenyCount != 1 {
+		t.Errorf("Without strict mode, read deny should appear exactly once, got %d", readDenyCount)
+	}
+}
+
+func TestSandboxProfileWithCorrectedRules(t *testing.T) {
+	resolver := NewRuleResolver()
+	resolver.AddDenyRule("/Users/test", []string{},
+		RuleSource{PresetName: "builtin:secure"})
+
+	writeRules, readRules, _ := resolver.Resolve()
+
+	// MANUALLY FIX: Remove AccessReadWrite deny rules from readRules
+	correctedReadRules := []ResolvedRule{}
+	for _, rule := range readRules {
+		if rule.Action == ActionDeny && rule.Mode == AccessReadWrite {
+			// Skip it - should only be in writeRules
+			continue
+		}
+		correctedReadRules = append(correctedReadRules, rule)
+	}
+
+	config := &SandboxConfig{
+		WriteRules: writeRules,
+		ReadRules:  correctedReadRules, // Use corrected list
+		Strict:     true,
+	}
+
+	profile, err := generateSandboxProfile(config)
+	if err != nil {
+		t.Fatalf("generateSandboxProfile failed: %v", err)
+	}
+
+	readDenyCount := strings.Count(profile, `(deny file-read-data (subpath "/Users/test"))`)
+
+	if readDenyCount != 1 {
+		t.Errorf("With corrected rules, read deny should appear exactly once, got %d", readDenyCount)
+	}
+}

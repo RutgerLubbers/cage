@@ -213,8 +213,8 @@ func (r *RuleResolver) Resolve() (writeRules, readRules []ResolvedRule, conflict
 			if key.mode&AccessWrite != 0 {
 				writeRules = append(writeRules, rule)
 			}
-			if key.mode&AccessRead != 0 && key.mode != AccessWrite {
-				// Only add to readRules if it's pure read or read+write but not just write
+			if key.mode == AccessRead {
+				// Only add to readRules if it's pure read-only
 				readRules = append(readRules, rule)
 			}
 			continue
@@ -261,7 +261,8 @@ func (r *RuleResolver) Resolve() (writeRules, readRules []ResolvedRule, conflict
 		if key.mode&AccessWrite != 0 {
 			writeRules = append(writeRules, winner)
 		}
-		if key.mode&AccessRead != 0 && key.mode != AccessWrite {
+		if key.mode == AccessRead {
+			// Only add to readRules if it's pure read-only
 			readRules = append(readRules, winner)
 		}
 	}
