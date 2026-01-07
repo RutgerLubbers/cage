@@ -40,8 +40,6 @@ type flags struct {
 	strict        bool
 	allowRead     []string
 	deny          []string
-	denyRead      []string
-	denyWrite     []string
 	noDefaults    bool
 }
 
@@ -97,23 +95,7 @@ func parseFlags() (*flags, []string) {
 	flag.Var(
 		&denyFlags,
 		"deny",
-		"Deny both read and write access to paths (read deny only effective on macOS)",
-	)
-
-	// Custom flag parsing to handle multiple --deny-read flags
-	var denyReadFlags arrayFlags
-	flag.Var(
-		&denyReadFlags,
-		"deny-read",
-		"Deny read access to paths (only effective on macOS)",
-	)
-
-	// Custom flag parsing to handle multiple --deny-write flags
-	var denyWriteFlags arrayFlags
-	flag.Var(
-		&denyWriteFlags,
-		"deny-write",
-		"Deny write access to paths (carve-out from broader allows)",
+		"Deny read and write access to paths; use 'except' in presets for read-only carve-outs",
 	)
 
 	// Custom flag parsing to handle multiple --preset flags
@@ -179,8 +161,6 @@ func parseFlags() (*flags, []string) {
 	f.presets = []string(presetFlags)
 	f.allowRead = []string(allowReadFlags)
 	f.deny = []string(denyFlags)
-	f.denyRead = []string(denyReadFlags)
-	f.denyWrite = []string(denyWriteFlags)
 
 	return f, flag.Args()
 }
@@ -206,12 +186,20 @@ func printPreset(name string, p *Preset, format string, extends []string) {
 }
 
 func sortedPaths(paths []AllowPath) []AllowPath {
-	sorted := make([]AllowPath, len(paths))
-	copy(sorted, paths)
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].Path < sorted[j].Path
+	// Deduplicate by path, keeping first occurrence
+	seen := make(map[string]bool)
+	unique := make([]AllowPath, 0, len(paths))
+	for _, p := range paths {
+		if !seen[p.Path] {
+			seen[p.Path] = true
+			unique = append(unique, p)
+		}
+	}
+	// Sort by path
+	sort.Slice(unique, func(i, j int) bool {
+		return unique[i].Path < unique[j].Path
 	})
-	return sorted
+	return unique
 }
 
 func printPresetText(name string, p *Preset, extends []string) {
@@ -258,23 +246,12 @@ func printPresetText(name string, p *Preset, extends []string) {
 	}
 
 	if len(p.Deny) > 0 {
-		fmt.Println("\ndeny (read+write):")
+		fmt.Println("\ndeny (read+write, except restores read-only):")
 		for _, path := range sortedPaths(p.Deny) {
 			fmt.Printf("  - %s\n", path.Path)
-		}
-	}
-
-	if len(p.DenyRead) > 0 {
-		fmt.Println("\ndeny-read:")
-		for _, path := range sortedPaths(p.DenyRead) {
-			fmt.Printf("  - %s\n", path.Path)
-		}
-	}
-
-	if len(p.DenyWrite) > 0 {
-		fmt.Println("\ndeny-write:")
-		for _, path := range sortedPaths(p.DenyWrite) {
-			fmt.Printf("  - %s\n", path.Path)
+			for _, exc := range path.Except {
+				fmt.Printf("    except: %s\n", exc)
+			}
 		}
 	}
 }
@@ -328,20 +305,6 @@ func printPresetYAML(name string, p *Preset, extends []string) {
 	if len(p.Deny) > 0 {
 		fmt.Println("    deny:")
 		for _, path := range sortedPaths(p.Deny) {
-			fmt.Printf("      - %q\n", path.Path)
-		}
-	}
-
-	if len(p.DenyRead) > 0 {
-		fmt.Println("    deny-read:")
-		for _, path := range sortedPaths(p.DenyRead) {
-			fmt.Printf("      - %q\n", path.Path)
-		}
-	}
-
-	if len(p.DenyWrite) > 0 {
-		fmt.Println("    deny-write:")
-		for _, path := range sortedPaths(p.DenyWrite) {
 			fmt.Printf("      - %q\n", path.Path)
 		}
 	}
@@ -466,20 +429,6 @@ func main() {
 			IsGlob:  strings.Contains(path, "*"),
 		})
 	}
-	for _, path := range flags.denyRead {
-		denyRules = append(denyRules, DenyRule{
-			Pattern: os.ExpandEnv(path),
-			Modes:   AccessRead,
-			IsGlob:  strings.Contains(path, "*"),
-		})
-	}
-	for _, path := range flags.denyWrite {
-		denyRules = append(denyRules, DenyRule{
-			Pattern: os.ExpandEnv(path),
-			Modes:   AccessWrite,
-			IsGlob:  strings.Contains(path, "*"),
-		})
-	}
 
 	// Process each preset and merge their settings
 	for _, presetName := range flags.presets {
@@ -511,22 +460,6 @@ func main() {
 			denyRules = append(denyRules, DenyRule{
 				Pattern: path.Path,
 				Modes:   AccessReadWrite,
-				IsGlob:  strings.Contains(path.Path, "*"),
-				Except:  path.Except,
-			})
-		}
-		for _, path := range processedPreset.DenyRead {
-			denyRules = append(denyRules, DenyRule{
-				Pattern: path.Path,
-				Modes:   AccessRead,
-				IsGlob:  strings.Contains(path.Path, "*"),
-				Except:  path.Except,
-			})
-		}
-		for _, path := range processedPreset.DenyWrite {
-			denyRules = append(denyRules, DenyRule{
-				Pattern: path.Path,
-				Modes:   AccessWrite,
 				IsGlob:  strings.Contains(path.Path, "*"),
 				Except:  path.Except,
 			})

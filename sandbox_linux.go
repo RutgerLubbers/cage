@@ -73,9 +73,10 @@ func runInSandbox(config *SandboxConfig) error {
 
 	rules = append(rules, landlock.RWFiles("/dev/null"))
 
-	// Build write deny set, but track exceptions (carve-outs)
+	// Build write deny set
+	// Note: exceptions (carve-outs) only restore READ access, not write.
+	// Use explicit 'allow:' paths to grant write access.
 	writeDenySet := make(map[string]bool)
-	writeExceptSet := make(map[string]bool)
 	for _, rule := range config.DenyRules {
 		if rule.Modes&AccessWrite != 0 && !rule.IsGlob {
 			absPath, err := filepath.Abs(rule.Pattern)
@@ -83,29 +84,11 @@ func runInSandbox(config *SandboxConfig) error {
 				absPath = rule.Pattern
 			}
 			writeDenySet[absPath] = true
-			// Track exceptions
-			for _, exc := range rule.Except {
-				absExc, err := filepath.Abs(exc)
-				if err != nil {
-					absExc = exc
-				}
-				writeExceptSet[absExc] = true
-			}
 		}
 	}
 
-	// Helper to check if a path should be denied (is under a deny path but not an exception)
+	// Helper to check if a path should be denied (is under a deny path)
 	shouldDenyWrite := func(path string) bool {
-		// If path is explicitly excepted, don't deny
-		if writeExceptSet[path] {
-			return false
-		}
-		// Check if path starts with any exception (is under an exception dir)
-		for exc := range writeExceptSet {
-			if strings.HasPrefix(path, exc+"/") || path == exc {
-				return false
-			}
-		}
 		// Check if path matches a deny rule
 		if writeDenySet[path] {
 			return true

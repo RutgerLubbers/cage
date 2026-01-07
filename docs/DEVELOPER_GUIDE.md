@@ -34,7 +34,7 @@ Cage looks for configuration in this order:
 # Default presets applied to ALL commands
 defaults:
   presets:
-    - "builtin:secrets-deny"
+    - "builtin:secure"
 
 presets:
   my-preset:
@@ -49,7 +49,7 @@ presets:
     # Enable strict mode (don't allow / read)
     strict: true
     
-    # Write paths (allow writing)
+    # Write paths (allow read + write)
     allow:
       - "."
       - "$HOME/.npm"
@@ -61,17 +61,12 @@ presets:
       - "/usr"
       - "$HOME/Documents"
     
-    # Deny read+write (macOS: fully enforced, Linux: write only)
+    # Deny read+write; 'except' restores READ-ONLY access
     deny:
-      - "$HOME/.ssh"
-    
-    # Deny read only (macOS only)
-    deny-read:
-      - "$HOME/.bash_history"
-    
-    # Deny write only (both platforms)
-    deny-write:
-      - "$HOME/.npmrc"
+      - path: "$HOME"
+        except:
+          - "$HOME/Documents"  # Read-only carve-out
+          - "$HOME/Downloads"
     
     # macOS keychain access
     allow-keychain: true
@@ -98,7 +93,7 @@ You can configure presets that apply to **every** cage invocation:
 ```yaml
 defaults:
   presets:
-    - "builtin:secrets-deny"  # Always protect secrets
+    - "builtin:secure"  # Always use secure defaults
 ```
 
 ### Skipping Defaults
@@ -148,8 +143,6 @@ All settings are merged (union for paths, OR for booleans).
 
 ```bash
 --deny PATH               # Deny both read AND write (read deny macOS only)
---deny-read PATH          # Deny read access (macOS only)
---deny-write PATH         # Deny write access (both platforms)
 ```
 
 ### Special Access
@@ -187,17 +180,17 @@ cage --allow . -- npm install
 # Strict mode with explicit reads
 cage --strict --allow-read /usr --allow-read /etc --allow . -- make
 
-# Protect secrets
-cage --deny "$HOME/.ssh" --deny "$HOME/.aws" --allow . -- python script.py
+# Protect secrets with secure-home
+cage --preset builtin:secure-home --allow . -- python script.py
 
 # Combine multiple presets
-cage --preset builtin:strict-base --preset builtin:secrets-deny --allow . -- ./build.sh
+cage --preset builtin:strict-base --preset builtin:secure-home --allow . -- ./build.sh
 
 # Dry-run to inspect profile
 cage --dry-run --preset ai-coder -- claude
 
 # Show preset as YAML (for copying to config)
-cage --show-preset builtin:secrets-deny -o yaml
+cage --show-preset builtin:secure-home -o yaml
 ```
 
 ---
@@ -208,19 +201,17 @@ Use with `--preset builtin:NAME` or extend in your config.
 
 ### builtin:secure (Recommended)
 
-**The recommended default preset.** Inherits from `strict-base` and `secrets-deny`, adds write access to current directory, XDG directories, AI coding tools, and IDE configs:
+**The recommended default preset.** Inherits from `strict-base` and `secure-home`. Denies `$HOME` broadly with read-only carve-outs for safe directories, then allows writes to current directory, AI coding tools, and IDE configs:
 
 ```yaml
 extends:
   - "builtin:strict-base"
-  - "builtin:secrets-deny"
+  - "builtin:secure-home"
 allow:
   - "."
-  - "$HOME/.local/share"
-  - "$HOME/.local/state"
   # AI coding tools
   - "$HOME/.bun"
-  - "$HOME/.cache/opencode"
+  - "$HOME/.cache"
   - "$HOME/.claude"
   - "$HOME/.codeium"
   - "$HOME/.cody"
@@ -238,19 +229,23 @@ allow:
   - "$HOME/.idea"
   - "$HOME/.vscode"
   - "$HOME/.vscode-server"
-  # Shell tools
-  - "$HOME/.cache/starship"
+  # XDG state directories
+  - "$HOME/.local/share"
+  - "$HOME/.local/state"
+  # Build toolchain caches
+  - "$HOME/go"
+  - "$HOME/Library/Caches"
 allow-git: true
 ```
 
 This preset is designed for everyday development work:
 - **Strict mode**: Only explicitly allowed paths are readable (essential for Linux secrets protection)
 - **System paths**: Can read OS binaries, libraries, and config (from `strict-base`)
+- **Home denied by default**: SSH keys, cloud credentials, browser data blocked (from `secure-home`)
+- **Safe carve-outs**: Documents, Downloads, Projects, etc. are readable but not writable
 - **Write to CWD**: Can modify files in current directory
-- **Write to XDG directories**: `~/.local/share` and `~/.local/state` for app data/state
-- **AI tool configs**: OpenCode, Claude, Aider, Continue, Codeium, Cody, Tabby, Cursor
-- **IDE configs**: VS Code, VSCodium, Cursor, JetBrains IDEs
-- **Secrets protected**: SSH keys, cloud credentials, browser data blocked (from `secrets-deny`)
+- **AI tool configs**: Claude, Aider, Continue, Codeium, Cody, Tabby, Cursor configs are writable
+- **IDE configs**: VS Code, VSCodium, Cursor, JetBrains IDEs are writable
 - **Git enabled**: Can perform git operations in worktrees
 
 ### builtin:strict-base
@@ -279,160 +274,96 @@ read:
   - "$HOME/.config/fish"
 ```
 
-### builtin:secrets-deny
+### builtin:secure-home
 
-Comprehensive protection for sensitive files and credentials:
-
-```yaml
-deny:
-  # Browser data (sessions, cookies, saved passwords)
-  - "$HOME/.config/BraveSoftware"
-  - "$HOME/.config/chromium"
-  - "$HOME/.config/google-chrome"
-  - "$HOME/.mozilla/firefox"
-
-  # CI/CD and deployment platforms
-  - "$HOME/.config/circleci"        # CircleCI tokens
-  - "$HOME/.config/heroku"          # Heroku API keys
-  - "$HOME/.config/netlify"         # Netlify access tokens
-  - "$HOME/.config/railway"         # Railway deployment tokens
-  - "$HOME/.config/vercel"          # Vercel deployment tokens
-
-  # Cloud provider credentials
-  - "$HOME/.aws"                    # AWS CLI credentials
-  - "$HOME/.azure"                  # Azure CLI credentials
-  - "$HOME/.config/doctl"           # DigitalOcean CLI
-  - "$HOME/.config/flyctl"          # Fly.io CLI
-  - "$HOME/.config/gcloud"          # Google Cloud SDK
-  - "$HOME/.config/hcloud"          # Hetzner Cloud CLI
-  - "$HOME/.config/linode"          # Linode CLI
-  - "$HOME/.config/scaleway"        # Scaleway CLI
-
-  # Container and orchestration
-  - "$HOME/.config/containers"       # Podman registry auth
-  - "$HOME/.config/k3d"              # k3d kubeconfigs
-  - "$HOME/.config/Lens"             # Lens Kubernetes IDE
-  - "$HOME/.config/OpenLens"         # OpenLens Kubernetes IDE
-  - "$HOME/.docker/config.json"      # Docker registry credentials
-  - "$HOME/.helm"                    # Helm repository credentials
-  - "$HOME/.kube"                    # Kubernetes config & tokens
-  - "$HOME/.lima/_config"            # Lima VM SSH keys
-  - "$HOME/.rd"                      # Rancher Desktop
-
-  # Git forges and CLI tools
-  - "$HOME/.config/gh"              # GitHub CLI (hosts.yml contains OAuth tokens)
-  - "$HOME/.config/glab"            # GitLab CLI tokens
-  - "$HOME/.config/hub"             # Hub CLI OAuth tokens
-  - "$HOME/.git-credentials"        # Git credential storage
-  - "$HOME/.netrc"                  # FTP/HTTP credentials (used by curl, etc.)
-
-  # macOS sensitive data (Keychain, Mail, Messages, Safari, etc.)
-  - "$HOME/Library"
-
-  # Package manager credentials
-  - "$HOME/.cargo/credentials.toml" # Cargo/crates.io tokens
-  - "$HOME/.config/configstore"     # npm/yarn token storage (used by many Node tools)
-  - "$HOME/.config/pip"             # pip config (can contain tokens)
-  - "$HOME/.npmrc"                  # npm auth tokens
-  - "$HOME/.pypirc"                 # PyPI upload credentials
-
-  # Security and encryption
-  - "$HOME/.config/op"              # 1Password CLI session data
-  - "$HOME/.config/sops/age"        # SOPS age encryption keys
-  - "$HOME/.gnupg"                  # GPG keys and config
-
-  # Security scanning and dev tools
-  - "$HOME/.config/ngrok"           # ngrok auth tokens
-  - "$HOME/.config/snyk"            # Snyk API tokens
-
-  # Shell history (contains commands, may expose secrets in env vars)
-  - "$HOME/.bash_history"
-  - "$HOME/.local/share/atuin"                # Atuin shell history
-  - "$HOME/.local/share/fish/fish_history"
-  - "$HOME/.mysql_history"
-  - "$HOME/.node_repl_history"
-  - "$HOME/.psql_history"
-  - "$HOME/.python_history"
-  - "$HOME/.rediscli_history"
-  - "$HOME/.zsh_history"
-
-  # SSH keys and config
-  - "$HOME/.ssh"
-```
-
-### builtin:home-dotfiles-deny
-
-Deny all dotfiles in home directory:
+Denies the entire `$HOME` directory with read-only carve-outs for safe directories. Use with `allow` to grant write access to specific paths:
 
 ```yaml
 deny:
-  - "$HOME/.*"    # Glob pattern - only effective on macOS!
+  - path: "$HOME"
+    except:
+      # Safe user directories (read-only via except)
+      - "$HOME/Code"
+      - "$HOME/Desktop"
+      - "$HOME/Developer"
+      - "$HOME/Documents"
+      - "$HOME/Downloads"
+      - "$HOME/Movies"
+      - "$HOME/Music"
+      - "$HOME/Pictures"
+      - "$HOME/Projects"
+      - "$HOME/Videos"
+      - "$HOME/src"
+      - "$HOME/workspace"
+      - "$HOME/go/src"
+      # Shell configs (read-only)
+      - "$HOME/.bashrc"
+      - "$HOME/.zshrc"
+      - "$HOME/.profile"
+      - "$HOME/.config/fish"
+      - "$HOME/.config/starship.toml"
+      # Git config (read-only)
+      - "$HOME/.gitconfig"
+      - "$HOME/.config/git"
+      # Editor configs (read-only)
+      - "$HOME/.vimrc"
+      - "$HOME/.config/nvim"
 ```
 
-> **Warning**: On Linux, this glob pattern cannot be enforced for reads. Use `builtin:safe-home` instead.
-
-### builtin:safe-home
-
-Strict mode with safe home directories:
+**Key concept:** The `except` list restores **read-only** access. To grant write access to paths within `$HOME`, use `allow`:
 
 ```yaml
-strict: true
-read:
-  # System paths (same as strict-base)
-  - "/usr"
-  - "/bin"
-  - "/sbin"
-  - "/lib"
-  - "/lib64"
-  - "/etc"
-  - "/opt"
-  - "/var"
-  - "/dev"
-  - "/proc"
-  - "/sys"
-  - "/System"
-  - "/Library"
-  - "/Applications"
-  - "/private/var/folders"
-  
-  # Safe home directories
-  - "$HOME/Documents"
-  - "$HOME/Downloads"
-  - "$HOME/Desktop"
-  - "$HOME/Pictures"
-  - "$HOME/Music"
-  - "$HOME/Videos"
-  - "$HOME/Movies"
-  - "$HOME/Projects"
-  - "$HOME/Developer"
-  - "$HOME/Code"
-  - "$HOME/src"
-  - "$HOME/go/src"
-  - "$HOME/workspace"
+extends:
+  - "builtin:secure-home"
+allow:
+  - "."                    # Write to CWD
+  - "$HOME/.claude"        # Write to Claude config
 ```
 
 ### builtin:npm
 
-Node.js development paths:
+Node.js development paths (additive - use with `builtin:secure` or `--allow .`):
 
 ```yaml
 allow:
-  - "."
   - "$HOME/.npm"
+  - "$HOME/.bun"
   - "$HOME/.cache/npm"
   - "node_modules"
 ```
 
 ### builtin:cargo
 
-Rust development paths:
+Rust development paths (additive - use with `builtin:secure` or `--allow .`):
 
 ```yaml
 allow:
-  - "."
   - "$HOME/.cargo"
   - "$HOME/.rustup"
   - "target"
+```
+
+### builtin:java
+
+Java/JVM development paths (additive - use with `builtin:secure` or `--allow .`):
+
+```yaml
+allow:
+  - "$HOME/.m2"
+  - "$HOME/.gradle"
+  - "$HOME/.java"
+  - "target"
+  - "build"
+```
+
+### builtin:go
+
+Go development paths (additive - use with `builtin:secure` or `--allow .`):
+
+```yaml
+allow:
+  - "$HOME/go"
+  - "$HOME/.cache/go-build"
 ```
 
 ---
@@ -448,14 +379,14 @@ presets:
   secure-npm:
     extends:
       - "builtin:strict-base"
-      - "builtin:secrets-deny"
+      - "builtin:secure-home"
       - "builtin:npm"
     allow:
       - "$HOME/.config/npm"
 ```
 
 **Merge semantics:**
-- `allow`, `read`, `deny`, `deny-read`, `deny-write`: **union** (combined)
+- `allow`, `read`, `deny`: **union** (combined)
 - `strict`, `allow-keychain`, `allow-git`: **OR** (true if any is true)
 
 ### Path Options
@@ -504,7 +435,7 @@ auto-presets:
   - command: git
     presets:
       - git-ops
-      - secrets-deny
+      - secure-home
 ```
 
 **How it works:**
@@ -631,8 +562,8 @@ presets:
 presets:
   paranoid:
     extends:
-      - "builtin:safe-home"
-      - "builtin:secrets-deny"
+      - "builtin:strict-base"
+      - "builtin:secure-home"
     allow:
       - "."
 ```
@@ -650,16 +581,16 @@ cage --allow . -- ./script.sh
 cage --allow ./output -- ./script.sh
 ```
 
-### 3. Use Deny Rules for Defense in Depth (macOS)
+### 3. Use secure-home for Defense in Depth (macOS)
 
-Even with strict mode, add deny rules as a safety net:
+Even with strict mode, add secure-home as a safety net:
 
 ```yaml
 presets:
   defense-in-depth:
     extends:
       - "builtin:strict-base"
-      - "builtin:secrets-deny"  # Extra protection
+      - "builtin:secure-home"  # Extra protection
 ```
 
 ### 4. Audit with Dry-Run
@@ -668,19 +599,6 @@ Always check what a preset does before using it:
 
 ```bash
 cage --dry-run --preset my-preset -- command
-```
-
-### 5. Protect Shell Configuration
-
-Prevent malicious code from modifying your shell:
-
-```yaml
-deny-write:
-  - "$HOME/.bashrc"
-  - "$HOME/.zshrc"
-  - "$HOME/.profile"
-  - "$HOME/.bash_profile"
-  - "$HOME/.zprofile"
 ```
 
 ---
@@ -694,7 +612,7 @@ presets:
   ai-coder:
     extends:
       - "builtin:strict-base"
-      - "builtin:secrets-deny"
+      - "builtin:secure-home"
     allow:
       - "."
       - path: "/tmp"
@@ -721,8 +639,6 @@ presets:
       - "$HOME/.cache/yarn"
       - "$HOME/.cache/pnpm"
       - "$HOME/.local/share/pnpm"
-    deny-write:
-      - "$HOME/.npmrc"  # Protect npm token
 
 auto-presets:
   - command-pattern: ^(npm|npx|yarn|pnpm|node|tsx|ts-node)$
@@ -742,8 +658,6 @@ presets:
       - "$HOME/.virtualenvs"
       - ".venv"
       - "venv"
-    deny-write:
-      - "$HOME/.pypirc"  # Protect PyPI token
 
 auto-presets:
   - command-pattern: ^(python|python3|pip|pip3|poetry|pdm|uv)$
@@ -776,7 +690,7 @@ presets:
   base-dev:
     extends:
       - "builtin:strict-base"
-      - "builtin:secrets-deny"
+      - "builtin:secure-home"
     allow:
       - "."
       - path: "/tmp"

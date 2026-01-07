@@ -47,8 +47,6 @@ type Preset struct {
 	AllowGit      bool        `yaml:"allow-git"`
 	Read          []AllowPath `yaml:"read,omitempty"`
 	Deny          []AllowPath `yaml:"deny,omitempty"`
-	DenyRead      []AllowPath `yaml:"deny-read,omitempty"`
-	DenyWrite     []AllowPath `yaml:"deny-write,omitempty"`
 }
 
 type AllowPath struct {
@@ -193,8 +191,6 @@ func mergePresets(dst, src *Preset) {
 	dst.Allow = append(dst.Allow, src.Allow...)
 	dst.Read = append(dst.Read, src.Read...)
 	dst.Deny = append(dst.Deny, src.Deny...)
-	dst.DenyRead = append(dst.DenyRead, src.DenyRead...)
-	dst.DenyWrite = append(dst.DenyWrite, src.DenyWrite...)
 
 	dst.Strict = dst.Strict || src.Strict
 	dst.SkipDefaults = dst.SkipDefaults || src.SkipDefaults
@@ -279,8 +275,6 @@ func (p *Preset) ProcessPreset() (*Preset, error) {
 		Allow:         make([]AllowPath, 0, len(p.Allow)),
 		Read:          make([]AllowPath, 0, len(p.Read)),
 		Deny:          make([]AllowPath, 0, len(p.Deny)),
-		DenyRead:      make([]AllowPath, 0, len(p.DenyRead)),
-		DenyWrite:     make([]AllowPath, 0, len(p.DenyWrite)),
 	}
 
 	expandPath := func(path AllowPath) AllowPath {
@@ -313,12 +307,6 @@ func (p *Preset) ProcessPreset() (*Preset, error) {
 	}
 	for _, path := range p.Deny {
 		processed.Deny = append(processed.Deny, expandPath(path))
-	}
-	for _, path := range p.DenyRead {
-		processed.DenyRead = append(processed.DenyRead, expandPath(path))
-	}
-	for _, path := range p.DenyWrite {
-		processed.DenyWrite = append(processed.DenyWrite, expandPath(path))
 	}
 
 	return processed, nil

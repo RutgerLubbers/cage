@@ -19,7 +19,7 @@ Cage provides a unified way to run potentially untrusted commands or scripts wit
 - **Secrets protection**: Built-in presets to block access to SSH keys, cloud credentials, shell history
 - **Cross-platform**: Works on Linux (kernel 5.13+) and macOS
 - **Flexible permissions**: Grant write access via `--allow`, read access via `--allow-read` (strict mode)
-- **Deny rules**: Block specific paths with `--deny`, `--deny-read`, `--deny-write`
+- **Deny rules**: Block specific paths with `--deny` (with optional `except` carve-outs for read-only access)
 - **Deny carve-outs**: Exclude specific subdirectories from deny rules with `except`
 - **Preset system**: Built-in and custom presets with inheritance
 - **Auto-presets**: Automatically apply presets based on command name
@@ -29,7 +29,7 @@ Cage provides a unified way to run potentially untrusted commands or scripts wit
 
 ### From Source
 ```bash
-git clone https://github.com/rutgervanderelst/cage
+git clone https://github.com/RutgerLubbers/cage
 cd cage
 go build
 ```
@@ -47,7 +47,7 @@ cage [flags] <command> [args...]
 #### Write Access
 - `--allow <path>`: Grant write access to a specific path (can be used multiple times)
 - `--allow-keychain`: Allow write access to the macOS keychain (macOS only)
-- `--allow-git`: Allow access to git common directory (enables git operations in worktrees)
+- `--allow-git`: Allow access to git common directory. **Only needed for git worktrees** — in a worktree, `.git` is a file pointing to the main repo's git data. This flag finds and allows that shared directory. For regular repos, `--allow .` already includes `.git`.
 - `--allow-all`: Disable all restrictions (useful for debugging)
 
 #### Strict Mode & Read Access
@@ -55,9 +55,7 @@ cage [flags] <command> [args...]
 - `--allow-read <path>`: Grant read access to specific paths (only meaningful with `--strict`)
 
 #### Deny Rules
-- `--deny <path>`: Deny both read and write access (read deny only effective on macOS)
-- `--deny-read <path>`: Deny read access (only effective on macOS)
-- `--deny-write <path>`: Deny write access (both platforms)
+- `--deny <path>`: Deny both read and write access (read deny only effective on macOS); use `except` in config for carve-outs
 
 #### Presets
 - `--preset <name>`: Use a predefined preset configuration (can be used multiple times)
@@ -107,9 +105,15 @@ cage -allow-all -- make install
 
 #### Enable git operations in worktrees
 ```bash
-# Allow git operations when working in a git worktree
-cage -allow-git -allow . -- git checkout -b new-feature
-cage -allow-git -allow . -- git commit -m "Update files"
+# --allow-git is needed for git WORKTREES (not regular repos)
+# In a worktree, .git is a file pointing to the main repo's .git directory
+# --allow-git finds and allows access to that common git directory
+
+# For regular repos, --allow . already includes .git - no need for --allow-git
+cage --allow . -- git commit -m "Update files"
+
+# For worktrees, --allow-git is required to access the shared git data
+cage --allow-git --allow . -- git commit -m "Update files"
 ```
 
 #### Using presets
@@ -119,7 +123,7 @@ cage --preset builtin:npm -- npm install
 cage --preset builtin:cargo -- cargo build
 
 # Combine built-in presets for security
-cage --preset builtin:strict-base --preset builtin:secrets-deny --allow . -- ./script.sh
+cage --preset builtin:strict-base --preset builtin:secure-home --allow . -- ./script.sh
 
 # Use custom preset from config file
 cage --preset my-custom-preset -- ./script.sh
@@ -128,7 +132,7 @@ cage --preset my-custom-preset -- ./script.sh
 cage --list-presets
 
 # View preset contents
-cage --show-preset builtin:secrets-deny
+cage --show-preset builtin:secure-home
 cage --show-preset builtin:strict-base -o yaml
 
 # Auto-presets in action (when configured)
@@ -141,17 +145,17 @@ cage npm install  # Automatically applies npm preset
 # Strict mode restricts read access to explicit paths only
 cage --strict --allow-read /usr --allow-read /etc --allow . -- make
 
-# Use built-in safe-home preset (strict mode + safe directories)
-cage --preset builtin:safe-home --allow . -- npm install
+# Use built-in secure preset (strict mode + secure home)
+cage --preset builtin:secure -- npm install
 ```
 
 #### Deny rules (macOS full support, Linux write-only)
 ```bash
-# Deny access to secrets
-cage --deny "$HOME/.ssh" --deny "$HOME/.aws" --allow . -- python script.py
+# Deny access to home with carve-outs
+cage --preset builtin:secure-home --allow . -- python script.py
 
-# Use built-in secrets-deny preset
-cage --preset builtin:secrets-deny --allow . -- ./untrusted-script.sh
+# Use built-in secure-home preset
+cage --preset builtin:secure-home --allow . -- ./untrusted-script.sh
 ```
 
 ### Configuration File
@@ -169,13 +173,13 @@ Cage ships with these built-in presets (use with `--preset builtin:NAME`):
 
 | Preset | Description |
 |--------|-------------|
-| `builtin:secure` | **Recommended.** Strict mode + system reads + secrets deny + CWD write + git enabled |
-| `builtin:strict-base` | Minimal system read access with strict mode enabled |
-| `builtin:secrets-deny` | Blocks SSH keys, AWS/Azure/GCloud creds, GPG, shell history, browser data |
-| `builtin:safe-home` | Strict mode + safe home directories (Documents, Downloads, Projects, etc.) |
-| `builtin:home-dotfiles-deny` | Deny all dotfiles in home (macOS only - globs don't work on Linux) |
-| `builtin:npm` | Write access for Node.js development (., ~/.npm, ~/.cache/npm) |
-| `builtin:cargo` | Write access for Rust development (., ~/.cargo, ~/.rustup) |
+| `builtin:secure` | **Recommended.** Strict mode + system reads + $HOME denied with read-only carve-outs + CWD write + all dev tools |
+| `builtin:strict-base` | Minimal system read access with strict mode enabled (no home access) |
+| `builtin:secure-home` | Denies all of $HOME, then carves out read-only exceptions for safe directories |
+| `builtin:npm` | Node.js paths (~/.npm, ~/.bun, node_modules) - additive, use with `--allow .` |
+| `builtin:cargo` | Rust paths (~/.cargo, ~/.rustup, target) - additive, use with `--allow .` |
+| `builtin:java` | Java/JVM paths (~/.m2, ~/.gradle, target, build) - additive, use with `--allow .` |
+| `builtin:go` | Go paths (~/go, ~/.cache/go-build) - additive, use with `--allow .` |
 
 Example configuration file:
 
@@ -229,9 +233,7 @@ Presets support the following options:
 - `allow`: List of paths to grant write access
 - `read`: List of read-only paths (only used when `strict: true`)
 - `deny`: List of paths to deny read+write (read deny only effective on macOS)
-  - Supports `except` field for carve-outs (see below)
-- `deny-read`: List of paths to deny read (macOS only)
-- `deny-write`: List of paths to deny write (both platforms)
+  - Supports `except` field for carve-outs that restore **read-only** access
 - `allow-git`: Enable access to git common directory (boolean)
 - `allow-keychain`: Enable macOS keychain access (boolean)
 
@@ -273,42 +275,31 @@ presets:
 
 #### Deny Rules with Carve-outs (Exceptions)
 
-Deny rules support an `except` field that allows you to carve out specific subdirectories from a broader deny rule. This is useful when you want to deny access to a parent directory but allow access to specific children.
+Deny rules support an `except` field that allows you to carve out specific subdirectories from a broader deny rule. **Important**: The `except` carve-outs restore **read-only** access, not write access. Use explicit `allow` paths to grant write access.
 
 ```yaml
 presets:
   protect-with-exceptions:
     deny:
-      # Deny $HOME/Library but allow $HOME/Library/Caches
-      - path: "$HOME/Library"
+      # Deny $HOME but allow read-only access to safe directories
+      - path: "$HOME"
         except:
-          - "$HOME/Library/Caches"
-      
-      # Deny .config but allow specific tool configs
-      - path: "$HOME/.config"
-        except:
-          - "$HOME/.config/myapp"
-          - "$HOME/.config/allowed-tool"
+          - "$HOME/Documents"      # Read-only access
+          - "$HOME/Downloads"      # Read-only access
+          - "$HOME/.gitconfig"     # Read-only access
+    allow:
+      - "."                        # Write access to CWD
+      - "$HOME/.claude"            # Write access to Claude config
 ```
 
 How carve-outs work:
-- On **macOS**: The deny rule is emitted first, then allow rules for each exception. Since SBPL evaluates rules in order (last match wins), the exceptions override the deny.
-- On **Linux**: Carve-outs work for write denies only. Exception paths are tracked and excluded from the deny set, allowing them to be written if also in the allow list.
+- On **macOS**: The deny rule is emitted first, then allow rules for each exception. Since SBPL evaluates rules in order (last match wins), the exceptions override the deny with **read-only** access.
+- On **Linux**: Carve-outs work for write denies only. Exception paths are tracked and excluded from the deny set.
 
-Example use case - protecting macOS Library while allowing build caches:
-```yaml
-presets:
-  secure-macos:
-    deny:
-      - path: "$HOME/Library"
-        except:
-          - "$HOME/Library/Caches"    # Allow build tools to cache here
-          - "$HOME/Library/Logs"      # Allow logging
-    allow:
-      - "$HOME/Library/Caches"        # Must also be in allow for write access
-```
-
-**Note**: The exception path must also be in the `allow` list if you want write access to it. The `except` only prevents the deny from blocking it; you still need an explicit allow for write permission.
+The simplified model follows this philosophy:
+1. **Deny broadly**: Block entire directories (like `$HOME`)
+2. **Carve out reads**: Use `except` to restore read-only access to safe paths
+3. **Explicitly allow writes**: Use `allow` for paths that need write access
 
 #### Auto-Presets
 
@@ -505,7 +496,7 @@ presets:
   ai-coder:
     extends:
       - "builtin:strict-base"
-      - "builtin:secrets-deny"
+      - "builtin:secure-home"
     allow:
       - "."
       - path: "/tmp"

@@ -6,8 +6,8 @@ A cross-platform security sandbox CLI that restricts file system access for untr
 
 ```bash
 brew install --cask Warashi/tap/cage --no-quarantine  # macOS (Homebrew)
-go install github.com/Warashi/cage@latest             # Go install
-git clone https://github.com/Warashi/cage && cd cage && go build  # Source
+go install github.com/RutgerLubbers/cage@latest             # Go install
+git clone https://github.com/RutgerLubbers/cage && cd cage && go build  # Source
 ```
 
 ## Basic Syntax
@@ -39,12 +39,13 @@ Use with `--preset builtin:NAME`
 
 | Preset | Description |
 |--------|-------------|
-| `secure` | **Recommended.** Strict + system reads + secrets deny + CWD write + git |
+| `secure` | **Recommended.** Strict + system reads + $HOME denied with read-only carve-outs + all dev tools |
 | `strict-base` | Minimal system read access, strict mode enabled |
-| `secrets-deny` | Blocks SSH, AWS, cloud creds, GPG, shell history, browser data |
-| `safe-home` | Strict + safe home dirs (Documents, Downloads, Projects) |
-| `npm` | Node.js dev paths (., ~/.npm, ~/.cache/npm, node_modules) |
-| `cargo` | Rust dev paths (., ~/.cargo, ~/.rustup, target) |
+| `secure-home` | Denies $HOME with read-only carve-outs for safe directories |
+| `npm` | Node.js paths (~/.npm, ~/.bun, node_modules) - additive |
+| `cargo` | Rust paths (~/.cargo, ~/.rustup, target) - additive |
+| `java` | Java/JVM paths (~/.m2, ~/.gradle, target, build) - additive |
+| `go` | Go paths (~/go, ~/.cache/go-build) - additive |
 
 ## Common Examples
 
@@ -55,8 +56,8 @@ cage --preset builtin:secure -- npm install
 # Allow writing to current directory only
 cage --allow . -- python script.py
 
-# Protect secrets, allow CWD write
-cage --preset builtin:secrets-deny --allow . -- ./build.sh
+# Protect secrets with secure-home, allow CWD write
+cage --preset builtin:secure-home --allow . -- ./build.sh
 
 # AI coding assistant
 cage --preset builtin:secure --allow-keychain -- claude
@@ -123,4 +124,4 @@ if [ "$IN_CAGE" = "1" ]; then echo "Sandboxed"; fi
 
 - [Quickstart Guide](QUICKSTART.md)
 - [Developer Guide](DEVELOPER_GUIDE.md)
-- [GitHub Repository](https://github.com/Warashi/cage)
+- [GitHub Repository](https://github.com/RutgerLubbers/cage)

@@ -32,14 +32,6 @@ func showDryRun(config *SandboxConfig) error {
 				}
 				fmt.Printf("  * %s\n", absPath)
 			}
-
-			for _, path := range config.AllowedPaths {
-				absPath, err := filepath.Abs(path)
-				if err != nil {
-					absPath = path
-				}
-				fmt.Printf("  * %s (implicit from write allow)\n", absPath)
-			}
 		} else {
 			fmt.Println("- Allow read access to all files")
 		}

@@ -503,6 +503,17 @@ func TestSortedPaths(t *testing.T) {
 			},
 			want: []string{"/only"},
 		},
+		{
+			name: "duplicates removed",
+			input: []AllowPath{
+				{Path: "/a"},
+				{Path: "/b"},
+				{Path: "/a"},
+				{Path: "/c"},
+				{Path: "/b"},
+			},
+			want: []string{"/a", "/b", "/c"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -587,7 +598,7 @@ func TestPrintPresetText(t *testing.T) {
 			name:       "raw preset with extends field",
 			presetName: "child-preset",
 			preset: &Preset{
-				Extends:  []string{"builtin:strict-base", "builtin:secrets-deny"},
+				Extends:  []string{"builtin:strict-base", "builtin:secure-home"},
 				AllowGit: true,
 				Allow:    []AllowPath{{Path: "."}},
 			},
@@ -596,7 +607,7 @@ func TestPrintPresetText(t *testing.T) {
 				"Preset: child-preset",
 				"extends:",
 				"builtin:strict-base",
-				"builtin:secrets-deny",
+				"builtin:secure-home",
 				"allow-git: true",
 			},
 			wantNotContain: []string{
@@ -643,9 +654,9 @@ func TestPrintPresetYAML(t *testing.T) {
 				Strict:   true,
 				Allow:    []AllowPath{{Path: "."}},
 			},
-			extends: []string{"builtin:strict-base", "builtin:secrets-deny"},
+			extends: []string{"builtin:strict-base", "builtin:secure-home"},
 			wantContains: []string{
-				"# Extends: builtin:strict-base → builtin:secrets-deny",
+				"# Extends: builtin:strict-base → builtin:secure-home",
 				"presets:",
 				"  secure:",
 				"    allow-git: true",

@@ -1,5 +1,34 @@
 # Changelog
 
+## [v0.3.0](https://github.com/RutgerLubbers/cage/compare/v0.2.0...v0.3.0) - 2026-01-07
+
+### Breaking Changes
+- **Renamed preset**: `builtin:home-deny` → `builtin:secure-home`
+- **Renamed preset**: `builtin:maven` → `builtin:java`
+- **Removed preset**: `builtin:home-dotfiles-deny` (use `builtin:secure-home` instead)
+- **Removed preset**: `builtin:safe-home` (available as example `safe-home-allowlist`)
+- **Language presets are now additive**: `builtin:npm`, `builtin:cargo`, `builtin:java`, `builtin:go` no longer include `.` - use with `builtin:secure` or add `--allow .`
+
+### Added
+- **New preset**: `builtin:java` for Java/JVM development (~/.m2, ~/.gradle, ~/.java, target, build)
+- **New preset**: `builtin:go` for Go development (~/go, ~/.cache/go-build)
+- `builtin:secure` now extends all language presets (npm, cargo, java, go)
+- `builtin:npm` now includes `~/.bun` for Bun support
+- Path deduplication in `--show-preset` output
+
+### Changed
+- Simplified permission model: only `deny`+`except`, `allow`, and `read` options
+- `builtin:secure` is now the comprehensive preset for AI coding assistants
+- Improved documentation with clearer preset descriptions
+
+## [v0.2.0](https://github.com/RutgerLubbers/cage/compare/v0.1.13...v0.2.0) - 2025-12-17
+- feat: add deny rule carve-outs with `except` for read-only access
+- feat: add `eval-symlinks` option for paths
+- feat: add `-o raw` format for `--show-preset`
+- feat: show inheritance chain in `--show-preset` output
+- refactor: extract builtin presets to embedded YAML file
+- feat: expand `builtin:secure` preset for AI coding tools and IDEs
+
 ## [v0.1.13](https://github.com/Warashi/cage/compare/v0.1.12...v0.1.13) - 2025-11-04
 - build(deps): bump github/codeql-action from 4.30.9 to 4.31.0 by @dependabot[bot] in https://github.com/Warashi/cage/pull/63
 - chore: add meta.mainProgram to default.nix by @Warashi in https://github.com/Warashi/cage/pull/65

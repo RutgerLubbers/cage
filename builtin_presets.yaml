@@ -1,32 +1,38 @@
 # Built-in presets for cage
 # These are embedded at compile time and available as builtin:<name>
+#
+# Simplified model:
+# - deny: blocks read + write; 'except' restores READ-ONLY access
+# - allow: grants read + write access
+# - read: grants read-only access (only with strict: true)
 
 presets:
   # Recommended preset for AI coding assistants
-  # Combines strict mode + system reads + secrets deny + CWD write + git
+  # Denies $HOME broadly, carves out read-only paths, allows writes to CWD + tool configs
   secure:
     extends:
       - "builtin:strict-base"
-      - "builtin:secrets-deny"
+      - "builtin:secure-home"
+      - "builtin:npm"
+      - "builtin:cargo"
+      - "builtin:java"
+      - "builtin:go"
     allow:
       - "."
-      - "$HOME/.local/share"
-      - "$HOME/.local/state"
 
-      # AI coding tools config
-      - "$HOME/.bun"              # Bun package manager (used by opencode)
-      - "$HOME/.cache/opencode"
+      # AI coding tools
       - "$HOME/.claude"
-      - "$HOME/.codeium"          # Codeium
-      - "$HOME/.cody"             # Sourcegraph Cody
-      - "$HOME/.config/aider"
       - "$HOME/.config/claude"
+      - "$HOME/.config/aider"
       - "$HOME/.config/opencode"
-      - "$HOME/.continue"         # Continue.dev
-      - "$HOME/.cursor"           # Cursor editor
-      - "$HOME/.tabby"            # Tabby
+      - "$HOME/.cache/opencode"
+      - "$HOME/.codeium"
+      - "$HOME/.cody"
+      - "$HOME/.continue"
+      - "$HOME/.cursor"
+      - "$HOME/.tabby"
 
-      # IDE/editor config
+      # IDE/editor state
       - "$HOME/.config/Code"
       - "$HOME/.config/Cursor"
       - "$HOME/.config/JetBrains"
@@ -35,176 +41,107 @@ presets:
       - "$HOME/.vscode"
       - "$HOME/.vscode-server"
 
-      # Shell tools
-      - "$HOME/.cache/starship"
+      # XDG state directories
+      - "$HOME/.local/share"
+      - "$HOME/.local/state"
 
-      # Build toolchain caches
-      - "$HOME/go"                # Go modules and build cache
-      - "$HOME/Library/Caches"    # macOS app caches (Go, Homebrew, etc.)
-      - "$HOME/.cache"            # Linux XDG cache (Go, etc.)
+      # General caches
+      - "$HOME/.cache"
+      - "$HOME/Library/Caches"
     allow-git: true
+
+  # Denies $HOME with carve-outs for safe READ-ONLY paths
+  # Use 'allow' to grant write access to specific paths
+  secure-home:
+    deny:
+      - path: "$HOME"
+        except:
+          # Safe user directories (read-only via except)
+          - "$HOME/Code"
+          - "$HOME/Desktop"
+          - "$HOME/Developer"
+          - "$HOME/Documents"
+          - "$HOME/Downloads"
+          - "$HOME/Movies"
+          - "$HOME/Music"
+          - "$HOME/Pictures"
+          - "$HOME/Projects"
+          - "$HOME/Videos"
+          - "$HOME/src"
+          - "$HOME/workspace"
+
+          # Go source (separate from GOPATH cache)
+          - "$HOME/go/src"
+
+          # Shell configs (read-only)
+          - "$HOME/.bashrc"
+          - "$HOME/.zshrc"
+          - "$HOME/.profile"
+          - "$HOME/.config/fish"
+          - "$HOME/.config/starship.toml"
+
+          # Git config (read-only)
+          - "$HOME/.gitconfig"
+          - "$HOME/.config/git"
+
+          # Editor configs (read-only)
+          - "$HOME/.vimrc"
+          - "$HOME/.config/nvim"
 
   # Minimal system read access with strict mode enabled
   strict-base:
     strict: true
     read:
+      # macOS system paths
       - "/Applications"
       - "/Library"
       - "/System"
+      - "/private/var"
+      - "/private/var/folders"
+
+      # Unix standard paths
       - "/bin"
       - "/dev"
-      # macOS: /etc -> /private/etc, eval-symlinks resolves this
       - path: "/etc"
         eval-symlinks: true
       - "/lib"
       - "/lib64"
       - "/opt"
-      - "/private/var"
-      - "/private/var/folders"
       - "/proc"
       - "/sbin"
       - "/sys"
-      # macOS: /tmp -> /private/tmp
       - path: "/tmp"
         eval-symlinks: true
       - "/usr"
-      # macOS: /var -> /private/var
       - path: "/var"
         eval-symlinks: true
-      - "$HOME/.config/fish"
-      # Git configuration (needed for git operations and VCS-aware builds)
-      - "$HOME/.gitconfig"
-      - "$HOME/.config/git"
 
-  # Blocks SSH keys, cloud credentials, GPG, shell history, browser data
-  secrets-deny:
-    deny:
-      # SSH keys and config
-      - "$HOME/.ssh"
-
-      # Cloud provider credentials
-      - "$HOME/.aws"
-      - "$HOME/.azure"
-      - "$HOME/.config/gcloud"
-      - "$HOME/.config/doctl"       # DigitalOcean
-      - "$HOME/.config/flyctl"      # Fly.io
-      - "$HOME/.config/hcloud"      # Hetzner Cloud
-      - "$HOME/.config/linode"      # Linode
-      - "$HOME/.config/scaleway"    # Scaleway
-
-      # Container and orchestration
-      - "$HOME/.kube"
-      - "$HOME/.docker/config.json"
-      - "$HOME/.helm"
-      - "$HOME/.config/containers"  # Podman auth
-      - "$HOME/.lima/_config"       # Lima VM SSH keys
-      - "$HOME/.rd"                 # Rancher Desktop
-      - "$HOME/.config/k3d"         # k3d kubeconfigs
-      - "$HOME/.config/Lens"        # Lens IDE
-      - "$HOME/.config/OpenLens"    # OpenLens IDE
-
-      # CI/CD and deployment platforms
-      - "$HOME/.config/vercel"
-      - "$HOME/.config/netlify"
-      - "$HOME/.config/railway"
-      - "$HOME/.config/heroku"
-      - "$HOME/.config/circleci"
-
-      # Git forges and CLI tools
-      - "$HOME/.config/gh"          # GitHub CLI
-      - "$HOME/.config/hub"         # Hub CLI
-      - "$HOME/.config/glab"        # GitLab CLI
-      - "$HOME/.git-credentials"
-      - "$HOME/.netrc"
-
-      # Security and encryption
-      - "$HOME/.gnupg"
-      - "$HOME/.config/sops/age"    # SOPS age keys
-      - "$HOME/.config/op"          # 1Password CLI
-
-      # Package manager credentials
-      - "$HOME/.npmrc"
-      - "$HOME/.pypirc"
-      - "$HOME/.config/pip"
-      - "$HOME/.config/configstore" # npm/yarn token storage
-      - "$HOME/.cargo/credentials.toml"
-
-      # Security scanning and dev tools
-      - "$HOME/.config/snyk"
-      - "$HOME/.config/ngrok"
-
-      # Shell history (contains commands, secrets in env vars)
-      - "$HOME/.bash_history"
-      - "$HOME/.zsh_history"
-      - "$HOME/.local/share/atuin"  # Atuin shell history
-      - "$HOME/.local/share/fish/fish_history"
-      - "$HOME/.node_repl_history"
-      - "$HOME/.python_history"
-      - "$HOME/.psql_history"
-      - "$HOME/.mysql_history"
-      - "$HOME/.rediscli_history"
-
-      # macOS sensitive data (with carve-out for Caches)
-      - path: "$HOME/Library"
-        except:
-          - "$HOME/Library/Caches"
-
-      # Browser data (sessions, cookies, saved passwords)
-      - "$HOME/.config/google-chrome"
-      - "$HOME/.config/chromium"
-      - "$HOME/.mozilla/firefox"
-      - "$HOME/.config/BraveSoftware"
-
-  # Deny all dotfiles in home (macOS only - globs don't work on Linux)
-  home-dotfiles-deny:
-    deny:
-      - "$HOME/.*"
-
-  # Strict mode + safe home directories (Documents, Downloads, Projects, etc.)
-  safe-home:
-    strict: true
-    read:
-      - "/usr"
-      - "/bin"
-      - "/sbin"
-      - "/lib"
-      - "/lib64"
-      - "/etc"
-      - "/opt"
-      - "/var"
-      - "/dev"
-      - "/proc"
-      - "/sys"
-      - "/System"
-      - "/Library"
-      - "/Applications"
-      - "/private/var/folders"
-      - "$HOME/Documents"
-      - "$HOME/Downloads"
-      - "$HOME/Desktop"
-      - "$HOME/Pictures"
-      - "$HOME/Music"
-      - "$HOME/Videos"
-      - "$HOME/Movies"
-      - "$HOME/Projects"
-      - "$HOME/Developer"
-      - "$HOME/Code"
-      - "$HOME/src"
-      - "$HOME/go/src"
-      - "$HOME/workspace"
-
-  # Write access for Node.js development
+  # Write access for Node.js development (additive - use with builtin:secure or --allow .)
   npm:
     allow:
-      - "."
       - "$HOME/.npm"
+      - "$HOME/.bun"
       - "$HOME/.cache/npm"
       - "node_modules"
 
-  # Write access for Rust development
+  # Write access for Rust development (additive - use with builtin:secure or --allow .)
   cargo:
     allow:
-      - "."
       - "$HOME/.cargo"
       - "$HOME/.rustup"
       - "target"
+
+  # Write access for Java/JVM development (additive - use with builtin:secure or --allow .)
+  java:
+    allow:
+      - "$HOME/.m2"
+      - "$HOME/.gradle"
+      - "$HOME/.java"
+      - "target"
+      - "build"
+
+  # Write access for Go development (additive - use with builtin:secure or --allow .)
+  go:
+    allow:
+      - "$HOME/go"
+      - "$HOME/.cache/go-build"

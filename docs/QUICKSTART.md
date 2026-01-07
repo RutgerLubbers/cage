@@ -13,13 +13,13 @@ brew install --cask Warashi/tap/cage --no-quarantine
 ### Go Install
 
 ```bash
-go install github.com/Warashi/cage@latest
+go install github.com/RutgerLubbers/cage@latest
 ```
 
 ### From Source
 
 ```bash
-git clone https://github.com/Warashi/cage
+git clone https://github.com/RutgerLubbers/cage
 cd cage
 go build
 go install
@@ -46,8 +46,8 @@ cat > ~/.config/cage/presets.yaml << 'EOF'
 # builtin:secure provides:
 #   - strict mode (read restrictions)
 #   - system paths readable
-#   - secrets protected (SSH, AWS, browser data, etc.)
-#   - write access to current directory
+#   - $HOME denied with safe read-only carve-outs
+#   - write access to current directory + AI tool configs
 #   - git operations enabled
 defaults:
   presets:
@@ -89,12 +89,13 @@ Cage ships with ready-to-use presets:
 
 | Preset | Description |
 |--------|-------------|
-| `builtin:secure` | **Recommended default.** Strict mode + system reads + secrets deny + CWD write + git enabled |
+| `builtin:secure` | **Recommended default.** Strict mode + system reads + $HOME denied with carve-outs + all dev tools |
 | `builtin:strict-base` | Minimal system read access, strict mode enabled (no write paths) |
-| `builtin:secrets-deny` | Blocks SSH keys, AWS creds, browser data, shell history (denylist only) |
-| `builtin:safe-home` | Strict mode + safe home directories (Documents, Downloads, Projects) |
-| `builtin:npm` | Write access for Node.js development |
-| `builtin:cargo` | Write access for Rust development |
+| `builtin:secure-home` | Denies $HOME with read-only carve-outs for safe directories |
+| `builtin:npm` | Node.js paths - additive, use with `--allow .` or `builtin:secure` |
+| `builtin:cargo` | Rust paths - additive, use with `--allow .` or `builtin:secure` |
+| `builtin:java` | Java/JVM paths - additive, use with `--allow .` or `builtin:secure` |
+| `builtin:go` | Go paths - additive, use with `--allow .` or `builtin:secure` |
 
 ```bash
 # List all available presets
@@ -105,6 +106,28 @@ cage --show-preset builtin:secure
 
 # Use the secure preset directly
 cage --preset builtin:secure -- npm install
+```
+
+## Understanding the Permission Model
+
+Cage uses a simple three-option model:
+
+| Option | Effect |
+|--------|--------|
+| `deny` + `except` | Block read+write; `except` restores **read-only** access |
+| `allow` | Grant **read+write** access |
+| `read` | Grant **read-only** access (with `strict: true`) |
+
+Example flow:
+```yaml
+deny:
+  - path: "$HOME"
+    except:
+      - "$HOME/Documents"    # Can READ Documents
+      - "$HOME/.gitconfig"   # Can READ .gitconfig
+allow:
+  - "."                      # Can READ+WRITE current directory
+  - "$HOME/.claude"          # Can READ+WRITE .claude
 ```
 
 ## Shell Aliases

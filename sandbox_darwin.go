@@ -124,16 +124,8 @@ func generateSandboxProfile(config *SandboxConfig) (string, error) {
 				escapedPath := escapePathForSandbox(absPath)
 				fmt.Fprintf(&profile, "(deny file-write* (subpath \"%s\"))\n", escapedPath)
 			}
-			// Emit allows for exceptions (carve-outs) - these come after deny so they win
-			for _, exc := range rule.Except {
-				absExc, err := filepath.Abs(exc)
-				if err != nil {
-					absExc = exc
-				}
-				escapedExc := escapePathForSandbox(absExc)
-				fmt.Fprintf(&profile, "(allow file-write* (subpath \"%s\"))\n", escapedExc)
-				fmt.Fprintf(&profile, "(allow file-write* (literal \"%s\"))\n", escapedExc)
-			}
+			// Note: exceptions (carve-outs) only restore READ access, not write.
+			// Use explicit 'allow:' paths to grant write access.
 		}
 	}
 

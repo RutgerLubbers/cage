@@ -1,4 +1,4 @@
-module github.com/Warashi/cage
+module github.com/RutgerLubbers/cage
 
 go 1.24.4
 

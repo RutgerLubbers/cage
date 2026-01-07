@@ -1,47 +1,39 @@
+# Example user presets for cage
+# Place this file at ~/.config/cage/presets.yaml
+#
+# Simplified model:
+# - deny: blocks read + write; 'except' restores READ-ONLY access
+# - allow: grants read + write access
+# - read: grants read-only access (only with strict: true)
+
 presets:
-  npm:
+  # ==========================================================================
+  # AI Coder preset - comprehensive development environment
+  # ==========================================================================
+  # This preset extends builtin:secure which already includes all language
+  # presets (npm, cargo, java, go). Add any additional tools here.
+  #
+  # Usage: cage --preset ai-coder -- claude
+  # ==========================================================================
+  ai-coder:
+    extends:
+      - "builtin:secure"
     allow:
-      - "."
-      - "$HOME/.npm"
-      - "$HOME/.cache/npm"
-      - "$HOME/.npmrc"
+      # Additional AI tool paths not in builtin:secure
+      - "$HOME/.aider"
+      - "$HOME/.copilot"
+      - "$HOME/.github-copilot"
+    allow-keychain: true
+    allow-git: true
+
+  # ==========================================================================
+  # Language-specific presets (additive - use with builtin:secure)
+  # ==========================================================================
+  # Note: These are examples showing how to extend builtins.
+  # builtin:secure already includes npm, cargo, java, and go presets.
+  # ==========================================================================
   
-  cargo:
-    allow:
-      - "."
-      - "$HOME/.cargo"
-      - "$HOME/.rustup"
-      - "$HOME/.cache/sccache"
-  
-  pip:
-    allow:
-      - "."
-      - "$HOME/.cache/pip"
-      - "$HOME/.local"
-      - "$HOME/Library/Caches/pip"
-  
-  go:
-    allow:
-      - "."
-      - "$HOME/go"
-      - "$HOME/.cache/go-build"
-  
-  node:
-    allow:
-      - "."
-      - "$HOME/.npm"
-      - "$HOME/.cache/npm"
-      - "$HOME/.npmrc"
-      - "node_modules"
-  
-  ruby:
-    allow:
-      - "."
-      - "$HOME/.gem"
-      - "$HOME/.bundle"
-      - "$HOME/.rbenv"
-      - "$HOME/.rvm"
-  
+  # Python development
   python:
     allow:
       - "."
@@ -49,9 +41,20 @@ presets:
       - "$HOME/.cache/pip"
       - "$HOME/.local"
       - "$HOME/.virtualenvs"
+      - "$HOME/Library/Caches/pip"
       - "venv"
       - ".venv"
-  
+
+  # Ruby development  
+  ruby:
+    allow:
+      - "."
+      - "$HOME/.gem"
+      - "$HOME/.bundle"
+      - "$HOME/.rbenv"
+      - "$HOME/.rvm"
+
+  # Homebrew (macOS/Linux)
   homebrew:
     allow:
       - "."
@@ -60,6 +63,11 @@ presets:
       - "$HOME/Library/Caches/Homebrew"
       - "$HOME/Library/Logs/Homebrew"
 
+  # ==========================================================================
+  # Tool-specific presets
+  # ==========================================================================
+
+  # Claude Code specific paths
   claude-code:
     allow:
       - "."
@@ -74,39 +82,98 @@ presets:
     allow-keychain: true
     allow-git: true
 
-  # Example: Strict mode preset using inheritance
+  # ==========================================================================
+  # Custom secure presets - examples of different approaches
+  # ==========================================================================
+
+  # Example: Using the deny + except + allow model
+  # deny: blocks $HOME (read + write)
+  # except: restores read-only access to safe directories
+  # allow: grants read + write to specific paths
+  my-secure:
+    extends:
+      - "builtin:strict-base"
+    deny:
+      - path: "$HOME"
+        except:
+          # Read-only access (via except)
+          - "$HOME/Developer"
+          - "$HOME/Projects"
+          - "$HOME/.gitconfig"
+          - "$HOME/.zshrc"
+    allow:
+      # Read + write access (via allow)
+      - "."
+      - "$HOME/.claude"
+      - "$HOME/.cache"
+    allow-git: true
+
+  # Example: Minimal development preset
   secure-dev:
     extends:
       - "builtin:strict-base"
-      - "builtin:secrets-deny"
+      - "builtin:secure-home"
     allow:
       - "."
-    read:
-      - "$HOME/Projects"
-
-  # Example: Custom secrets protection (macOS only effective for reads)
-  protect-secrets:
-    deny:
-      - "$HOME/.ssh"
-      - "$HOME/.aws"
-      - "$HOME/.gnupg"
-    deny-read:
-      - "$HOME/.bash_history"
-      - "$HOME/.zsh_history"
-    deny-write:
-      - "$HOME/.npmrc"
-      - "$HOME/.pypirc"
+      - "$HOME/.cache"
 
   # Example: Strict npm development
   strict-npm:
     extends:
       - "builtin:strict-base"
-    strict: true
+      - "builtin:secure-home"
+      - "builtin:npm"
+
+  # ==========================================================================
+  # ALTERNATIVE APPROACH: Allowlist-based home protection
+  # ==========================================================================
+  # Instead of denying $HOME and carving out exceptions (denylist),
+  # you can use strict mode with explicit read paths (allowlist).
+  #
+  # Pros: Very explicit about what's readable
+  # Cons: Must add new directories manually as needed
+  #
+  # This is an alternative to builtin:secure-home for users who prefer
+  # the allowlist approach.
+  # ==========================================================================
+  
+  safe-home-allowlist:
+    extends:
+      - "builtin:strict-base"
+    read:
+      # Safe home directories (read-only)
+      - "$HOME/Code"
+      - "$HOME/Desktop"
+      - "$HOME/Developer"
+      - "$HOME/Documents"
+      - "$HOME/Downloads"
+      - "$HOME/Movies"
+      - "$HOME/Music"
+      - "$HOME/Pictures"
+      - "$HOME/Projects"
+      - "$HOME/Videos"
+      - "$HOME/src"
+      - "$HOME/workspace"
+      - "$HOME/go/src"
+      # Shell configs (read-only)
+      - "$HOME/.bashrc"
+      - "$HOME/.zshrc"
+      - "$HOME/.profile"
+      - "$HOME/.config/fish"
+      - "$HOME/.config/starship.toml"
+      # Git config (read-only)
+      - "$HOME/.gitconfig"
+      - "$HOME/.config/git"
+      # Editor configs (read-only)
+      - "$HOME/.vimrc"
+      - "$HOME/.config/nvim"
+
+  # Example using the allowlist approach
+  secure-allowlist:
+    extends:
+      - "safe-home-allowlist"
     allow:
       - "."
-      - "$HOME/.npm"
-      - "$HOME/.cache/npm"
-      - "node_modules"
-    read:
-      - "."
-      - "$HOME/.npmrc"
+      - "$HOME/.cache"
+      - "$HOME/.claude"
+    allow-git: true

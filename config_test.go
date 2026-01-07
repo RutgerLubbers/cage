@@ -173,11 +173,11 @@ func TestBuiltinPresetsYAMLLoaded(t *testing.T) {
 	expectedPresets := []string{
 		"secure",
 		"strict-base",
-		"secrets-deny",
-		"home-dotfiles-deny",
-		"safe-home",
+		"secure-home",
 		"npm",
 		"cargo",
+		"java",
+		"go",
 	}
 
 	for _, name := range expectedPresets {
@@ -227,18 +227,18 @@ func TestBuiltinSecurePreset(t *testing.T) {
 	}
 
 	if len(resolved.Deny) == 0 {
-		t.Error("builtin:secure should have Deny paths (inherited from secrets-deny)")
+		t.Error("builtin:secure should have Deny paths (inherited from secure-home)")
 	}
 
-	foundSshDeny := false
+	foundHomeDeny := false
 	for _, p := range resolved.Deny {
-		if p.Path == "$HOME/.ssh" {
-			foundSshDeny = true
+		if p.Path == "$HOME" {
+			foundHomeDeny = true
 			break
 		}
 	}
-	if !foundSshDeny {
-		t.Error("builtin:secure should deny $HOME/.ssh (inherited from secrets-deny)")
+	if !foundHomeDeny {
+		t.Error("builtin:secure should deny $HOME (inherited from secure-home)")
 	}
 }
 
@@ -829,7 +829,7 @@ func TestLoadConfigWithDefaults(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "test.yaml")
 	content := `defaults:
   presets:
-    - "builtin:secrets-deny"
+    - "builtin:secure-home"
     - "my-preset"
 
 presets:
@@ -848,8 +848,8 @@ presets:
 		t.Errorf("expected 2 default presets, got %d", len(config.Defaults.Presets))
 	}
 
-	if config.Defaults.Presets[0] != "builtin:secrets-deny" {
-		t.Errorf("expected first default preset to be 'builtin:secrets-deny', got %s", config.Defaults.Presets[0])
+	if config.Defaults.Presets[0] != "builtin:secure-home" {
+		t.Errorf("expected first default preset to be 'builtin:secure-home', got %s", config.Defaults.Presets[0])
 	}
 
 	if config.Defaults.Presets[1] != "my-preset" {
@@ -966,7 +966,7 @@ func TestLoadConfigWithSkipDefaults(t *testing.T) {
 	configPath := filepath.Join(tmpDir, "test.yaml")
 	content := `defaults:
   presets:
-    - "builtin:secrets-deny"
+    - "builtin:secure-home"
 
 presets:
   regular:
@@ -1191,11 +1191,11 @@ func TestResolvePresetMultipleParents(t *testing.T) {
 				Strict: true,
 				Read:   []AllowPath{{Path: "/usr"}, {Path: "/etc"}},
 			},
-			"secrets-deny": {
+			"secure-home": {
 				Deny: []AllowPath{{Path: "$HOME/.ssh"}, {Path: "$HOME/.aws"}},
 			},
 			"combined": {
-				Extends:  []string{"strict-base", "secrets-deny"},
+				Extends:  []string{"strict-base", "secure-home"},
 				AllowGit: true,
 				Allow:    []AllowPath{{Path: "."}},
 			},
@@ -1217,7 +1217,7 @@ func TestResolvePresetMultipleParents(t *testing.T) {
 		t.Errorf("should have 2 read paths from strict-base, got %d", len(resolved.Read))
 	}
 	if len(resolved.Deny) != 2 {
-		t.Errorf("should have 2 deny paths from secrets-deny, got %d", len(resolved.Deny))
+		t.Errorf("should have 2 deny paths from secure-home, got %d", len(resolved.Deny))
 	}
 	if len(resolved.Allow) != 1 {
 		t.Errorf("should have 1 allow path from combined, got %d", len(resolved.Allow))
