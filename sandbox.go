@@ -22,6 +22,7 @@ type DenyRule struct {
 	Pattern string     // The path pattern (may contain globs on macOS)
 	Modes   AccessMode // Which access modes to deny
 	IsGlob  bool       // True if pattern contains wildcards (only effective on macOS)
+	Except  []string   // Paths to exclude from this deny rule (carve-outs)
 }
 
 // SandboxConfig contains the configuration for running a command in a sandbox

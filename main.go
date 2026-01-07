@@ -512,6 +512,7 @@ func main() {
 				Pattern: path.Path,
 				Modes:   AccessReadWrite,
 				IsGlob:  strings.Contains(path.Path, "*"),
+				Except:  path.Except,
 			})
 		}
 		for _, path := range processedPreset.DenyRead {
@@ -519,6 +520,7 @@ func main() {
 				Pattern: path.Path,
 				Modes:   AccessRead,
 				IsGlob:  strings.Contains(path.Path, "*"),
+				Except:  path.Except,
 			})
 		}
 		for _, path := range processedPreset.DenyWrite {
@@ -526,6 +528,7 @@ func main() {
 				Pattern: path.Path,
 				Modes:   AccessWrite,
 				IsGlob:  strings.Contains(path.Path, "*"),
+				Except:  path.Except,
 			})
 		}
 

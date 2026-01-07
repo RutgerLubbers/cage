@@ -26,16 +26,6 @@ func runInSandbox(config *SandboxConfig) error {
 	var rules []landlock.Rule
 
 	if config.Strict {
-		systemRoots := []string{
-			"/usr", "/bin", "/sbin", "/lib", "/lib64",
-			"/etc", "/opt", "/var", "/dev", "/proc", "/sys",
-		}
-		for _, root := range systemRoots {
-			if info, err := os.Stat(root); err == nil && info.IsDir() {
-				rules = append(rules, landlock.RODirs(root))
-			}
-		}
-
 		for _, path := range config.ReadPaths {
 			absPath, err := filepath.Abs(path)
 			if err != nil {
@@ -83,7 +73,9 @@ func runInSandbox(config *SandboxConfig) error {
 
 	rules = append(rules, landlock.RWFiles("/dev/null"))
 
+	// Build write deny set, but track exceptions (carve-outs)
 	writeDenySet := make(map[string]bool)
+	writeExceptSet := make(map[string]bool)
 	for _, rule := range config.DenyRules {
 		if rule.Modes&AccessWrite != 0 && !rule.IsGlob {
 			absPath, err := filepath.Abs(rule.Pattern)
@@ -91,7 +83,40 @@ func runInSandbox(config *SandboxConfig) error {
 				absPath = rule.Pattern
 			}
 			writeDenySet[absPath] = true
+			// Track exceptions
+			for _, exc := range rule.Except {
+				absExc, err := filepath.Abs(exc)
+				if err != nil {
+					absExc = exc
+				}
+				writeExceptSet[absExc] = true
+			}
 		}
+	}
+
+	// Helper to check if a path should be denied (is under a deny path but not an exception)
+	shouldDenyWrite := func(path string) bool {
+		// If path is explicitly excepted, don't deny
+		if writeExceptSet[path] {
+			return false
+		}
+		// Check if path starts with any exception (is under an exception dir)
+		for exc := range writeExceptSet {
+			if strings.HasPrefix(path, exc+"/") || path == exc {
+				return false
+			}
+		}
+		// Check if path matches a deny rule
+		if writeDenySet[path] {
+			return true
+		}
+		// Check if path is under a denied directory
+		for denied := range writeDenySet {
+			if strings.HasPrefix(path, denied+"/") {
+				return true
+			}
+		}
+		return false
 	}
 
 	for _, path := range config.AllowedPaths {
@@ -100,7 +125,7 @@ func runInSandbox(config *SandboxConfig) error {
 			absPath = path
 		}
 
-		if writeDenySet[absPath] {
+		if shouldDenyWrite(absPath) {
 			fmt.Fprintf(os.Stderr,
 				"cage: info: skipping write allow for %s (matches deny rule)\n",
 				path,

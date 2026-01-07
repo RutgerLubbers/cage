@@ -2,6 +2,8 @@
 
 A cross-platform security sandbox CLI tool that restricts file system access for untrusted commands.
 
+> **Note**: This is a fork of [Warashi/cage](https://github.com/Warashi/cage) with additional features including deny rule carve-outs, improved symlink handling, and enhanced built-in presets.
+
 ## Overview
 
 Cage provides a unified way to run potentially untrusted commands or scripts with file system restrictions across Linux and macOS. It's designed for scenarios where you need to:
@@ -18,31 +20,16 @@ Cage provides a unified way to run potentially untrusted commands or scripts wit
 - **Cross-platform**: Works on Linux (kernel 5.13+) and macOS
 - **Flexible permissions**: Grant write access via `--allow`, read access via `--allow-read` (strict mode)
 - **Deny rules**: Block specific paths with `--deny`, `--deny-read`, `--deny-write`
+- **Deny carve-outs**: Exclude specific subdirectories from deny rules with `except`
 - **Preset system**: Built-in and custom presets with inheritance
 - **Auto-presets**: Automatically apply presets based on command name
 - **Transparent execution**: Uses `syscall.Exec` to replace the process, preventing sandbox bypass
 
 ## Installation
 
-### Pre-built Binaries with Homebrew Cask
-We doesn't sign the binaries, so you need to use `--no-quarantine` flag to avoid quarantine issues on macOS.
-```bash
-brew install --cask Warashi/tap/cage --no-quarantine
-```
-
-When upgrading Cage, you may need to run:
-```bash
-brew upgrade cage --no-quarantine
-```
-
-### With `go install`
-```bash
-go install github.com/Warashi/cage@latest
-```
-
 ### From Source
 ```bash
-git clone https://github.com/Warashi/cage
+git clone https://github.com/rutgervanderelst/cage
 cd cage
 go build
 ```
@@ -242,6 +229,7 @@ Presets support the following options:
 - `allow`: List of paths to grant write access
 - `read`: List of read-only paths (only used when `strict: true`)
 - `deny`: List of paths to deny read+write (read deny only effective on macOS)
+  - Supports `except` field for carve-outs (see below)
 - `deny-read`: List of paths to deny read (macOS only)
 - `deny-write`: List of paths to deny write (both platforms)
 - `allow-git`: Enable access to git common directory (boolean)
@@ -282,6 +270,45 @@ presets:
       - path: "/tmp"
         eval-symlinks: true  # Automatically resolves to /private/tmp
 ```
+
+#### Deny Rules with Carve-outs (Exceptions)
+
+Deny rules support an `except` field that allows you to carve out specific subdirectories from a broader deny rule. This is useful when you want to deny access to a parent directory but allow access to specific children.
+
+```yaml
+presets:
+  protect-with-exceptions:
+    deny:
+      # Deny $HOME/Library but allow $HOME/Library/Caches
+      - path: "$HOME/Library"
+        except:
+          - "$HOME/Library/Caches"
+      
+      # Deny .config but allow specific tool configs
+      - path: "$HOME/.config"
+        except:
+          - "$HOME/.config/myapp"
+          - "$HOME/.config/allowed-tool"
+```
+
+How carve-outs work:
+- On **macOS**: The deny rule is emitted first, then allow rules for each exception. Since SBPL evaluates rules in order (last match wins), the exceptions override the deny.
+- On **Linux**: Carve-outs work for write denies only. Exception paths are tracked and excluded from the deny set, allowing them to be written if also in the allow list.
+
+Example use case - protecting macOS Library while allowing build caches:
+```yaml
+presets:
+  secure-macos:
+    deny:
+      - path: "$HOME/Library"
+        except:
+          - "$HOME/Library/Caches"    # Allow build tools to cache here
+          - "$HOME/Library/Logs"      # Allow logging
+    allow:
+      - "$HOME/Library/Caches"        # Must also be in allow for write access
+```
+
+**Note**: The exception path must also be in the `allow` list if you want write access to it. The `except` only prevents the deny from blocking it; you still need an explicit allow for write permission.
 
 #### Auto-Presets
 

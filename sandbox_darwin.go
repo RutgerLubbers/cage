@@ -67,16 +67,6 @@ func generateSandboxProfile(config *SandboxConfig) (string, error) {
 	if config.Strict {
 		profile.WriteString("(deny file-read*)\n")
 
-		systemRoots := []string{
-			"/usr", "/bin", "/sbin", "/lib", "/etc", "/opt", "/var",
-			"/dev", "/System", "/Library", "/Applications",
-			"/private/var/folders",
-		}
-		for _, root := range systemRoots {
-			escapedPath := escapePathForSandbox(root)
-			fmt.Fprintf(&profile, "(allow file-read* (subpath \"%s\"))\n", escapedPath)
-		}
-
 		for _, path := range config.ReadPaths {
 			absPath, err := filepath.Abs(path)
 			if err != nil {
@@ -111,6 +101,16 @@ func generateSandboxProfile(config *SandboxConfig) (string, error) {
 				escapedPath := escapePathForSandbox(absPath)
 				fmt.Fprintf(&profile, "(deny file-read* (subpath \"%s\"))\n", escapedPath)
 			}
+			// Emit allows for exceptions (carve-outs) - these come after deny so they win
+			for _, exc := range rule.Except {
+				absExc, err := filepath.Abs(exc)
+				if err != nil {
+					absExc = exc
+				}
+				escapedExc := escapePathForSandbox(absExc)
+				fmt.Fprintf(&profile, "(allow file-read* (subpath \"%s\"))\n", escapedExc)
+				fmt.Fprintf(&profile, "(allow file-read* (literal \"%s\"))\n", escapedExc)
+			}
 		}
 		if rule.Modes&AccessWrite != 0 {
 			if rule.IsGlob {
@@ -123,6 +123,16 @@ func generateSandboxProfile(config *SandboxConfig) (string, error) {
 				}
 				escapedPath := escapePathForSandbox(absPath)
 				fmt.Fprintf(&profile, "(deny file-write* (subpath \"%s\"))\n", escapedPath)
+			}
+			// Emit allows for exceptions (carve-outs) - these come after deny so they win
+			for _, exc := range rule.Except {
+				absExc, err := filepath.Abs(exc)
+				if err != nil {
+					absExc = exc
+				}
+				escapedExc := escapePathForSandbox(absExc)
+				fmt.Fprintf(&profile, "(allow file-write* (subpath \"%s\"))\n", escapedExc)
+				fmt.Fprintf(&profile, "(allow file-write* (literal \"%s\"))\n", escapedExc)
 			}
 		}
 	}

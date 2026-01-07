@@ -20,21 +20,23 @@ archives:
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
 
-homebrew_casks:
-  - url:
-      verified: "github.com/Warashi/cage/"
-      using: ":homebrew_curl"
-
-    commit_author:
-      name: warashi-homebrew-tap
-      email: 1584123+warashi-homebrew-tap[bot]@users.noreply.github.com
-
-    commit_msg_template: "Brew cask update for {{ .ProjectName }} version {{ .Tag }}"
-    directory: Casks
-    skip_upload: auto
-
-    repository:
-      owner: Warashi
+brews:
+  - repository:
+      owner: RutgerLubbers
       name: homebrew-tap
       branch: main
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+
+    commit_author:
+      name: Rutger Lubbers
+      email: RutgerLubbers@gmail.com
+
+    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
+    directory: Formula
+    homepage: "https://github.com/RutgerLubbers/cage"
+    description: "Cross-platform sandbox CLI for restricting filesystem access"
+    license: "Apache-2.0"
+    skip_upload: auto
+
+    test: |
+      system "#{bin}/cage", "--version"

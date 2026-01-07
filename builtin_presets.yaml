@@ -37,6 +37,11 @@ presets:
 
       # Shell tools
       - "$HOME/.cache/starship"
+
+      # Build toolchain caches
+      - "$HOME/go"                # Go modules and build cache
+      - "$HOME/Library/Caches"    # macOS app caches (Go, Homebrew, etc.)
+      - "$HOME/.cache"            # Linux XDG cache (Go, etc.)
     allow-git: true
 
   # Minimal system read access with strict mode enabled
@@ -48,7 +53,9 @@ presets:
       - "/System"
       - "/bin"
       - "/dev"
-      - "/etc"
+      # macOS: /etc -> /private/etc, eval-symlinks resolves this
+      - path: "/etc"
+        eval-symlinks: true
       - "/lib"
       - "/lib64"
       - "/opt"
@@ -57,9 +64,17 @@ presets:
       - "/proc"
       - "/sbin"
       - "/sys"
+      # macOS: /tmp -> /private/tmp
+      - path: "/tmp"
+        eval-symlinks: true
       - "/usr"
-      - "/var"
+      # macOS: /var -> /private/var
+      - path: "/var"
+        eval-symlinks: true
       - "$HOME/.config/fish"
+      # Git configuration (needed for git operations and VCS-aware builds)
+      - "$HOME/.gitconfig"
+      - "$HOME/.config/git"
 
   # Blocks SSH keys, cloud credentials, GPG, shell history, browser data
   secrets-deny:
@@ -129,8 +144,10 @@ presets:
       - "$HOME/.mysql_history"
       - "$HOME/.rediscli_history"
 
-      # macOS sensitive data
-      - "$HOME/Library"
+      # macOS sensitive data (with carve-out for Caches)
+      - path: "$HOME/Library"
+        except:
+          - "$HOME/Library/Caches"
 
       # Browser data (sessions, cookies, saved passwords)
       - "$HOME/.config/google-chrome"

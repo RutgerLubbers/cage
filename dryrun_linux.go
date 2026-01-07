@@ -24,14 +24,13 @@ func showDryRun(config *SandboxConfig) error {
 		if config.Strict {
 			fmt.Println("- STRICT MODE: Only explicit read paths are allowed")
 			fmt.Println("- Allow read access to:")
-			fmt.Println("  * System paths (/usr, /bin, /sbin, /lib, /lib64, /etc, /opt, /var, /dev, /proc, /sys)")
 
 			for _, path := range config.ReadPaths {
 				absPath, err := filepath.Abs(path)
 				if err != nil {
 					absPath = path
 				}
-				fmt.Printf("  * %s (user specified)\n", absPath)
+				fmt.Printf("  * %s\n", absPath)
 			}
 
 			for _, path := range config.AllowedPaths {

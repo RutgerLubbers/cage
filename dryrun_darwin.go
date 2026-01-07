@@ -44,15 +44,13 @@ func showDryRun(config *SandboxConfig) error {
 			fmt.Println()
 			fmt.Println("- STRICT MODE: Deny all file reads by default")
 			fmt.Println("- Allow reads to:")
-			fmt.Println("  * System paths (/usr, /bin, /sbin, /lib, /etc, /opt, /var, /dev)")
-			fmt.Println("  * macOS paths (/System, /Library, /Applications)")
 
 			for _, path := range config.ReadPaths {
 				absPath, err := filepath.Abs(path)
 				if err != nil {
 					absPath = path
 				}
-				fmt.Printf("  * %s (user specified)\n", absPath)
+				fmt.Printf("  * %s\n", absPath)
 			}
 
 			for _, path := range config.AllowedPaths {

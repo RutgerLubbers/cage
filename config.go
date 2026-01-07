@@ -52,8 +52,9 @@ type Preset struct {
 }
 
 type AllowPath struct {
-	Path         string `yaml:"path"`
-	EvalSymLinks bool   `yaml:"eval-symlinks,omitempty"`
+	Path         string   `yaml:"path"`
+	EvalSymLinks bool     `yaml:"eval-symlinks,omitempty"`
+	Except       []string `yaml:"except,omitempty"` // Paths to exclude (carve-outs)
 }
 
 type AutoPresetRule struct {
@@ -290,7 +291,18 @@ func (p *Preset) ProcessPreset() (*Preset, error) {
 				expanded = resolvedPath
 			}
 		}
-		return AllowPath{Path: expanded}
+		// Expand exception paths
+		var expandedExcept []string
+		for _, exc := range path.Except {
+			expandedExc := os.ExpandEnv(exc)
+			if path.EvalSymLinks {
+				if resolved, err := filepath.EvalSymlinks(expandedExc); err == nil {
+					expandedExc = resolved
+				}
+			}
+			expandedExcept = append(expandedExcept, expandedExc)
+		}
+		return AllowPath{Path: expanded, Except: expandedExcept}
 	}
 
 	for _, path := range p.Allow {
