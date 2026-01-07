@@ -15,6 +15,8 @@
 - `builtin:secure` now extends all language presets (npm, cargo, java, go)
 - `builtin:npm` now includes `~/.bun` for Bun support
 - Path deduplication in `--show-preset` output
+- Homebrew installation instructions in README
+- GPG signing support task/documentation (`docs/todo/GPG_SIGNING_SUPPORT.md`)
 
 ### Changed
 - Simplified permission model: only `deny`+`except`, `allow`, and `read` options

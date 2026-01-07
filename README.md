@@ -27,6 +27,18 @@ Cage provides a unified way to run potentially untrusted commands or scripts wit
 
 ## Installation
 
+### Homebrew (macOS/Linux)
+
+```bash
+brew install RutgerLubbers/tap/cage
+```
+
+### Go Install
+
+```bash
+go install github.com/RutgerLubbers/cage@latest
+```
+
 ### From Source
 ```bash
 git clone https://github.com/RutgerLubbers/cage
