@@ -80,15 +80,21 @@ func generateSandboxProfile(config *SandboxConfig) (string, error) {
 		if rule.Action == ActionDeny {
 			for _, exc := range rule.Except {
 				escapedExc := escapePathForSandbox(exc)
-				fmt.Fprintf(&profile, "(allow file-read* (subpath \"%s\"))\n", escapedExc)
-				fmt.Fprintf(&profile, "(allow file-read* (literal \"%s\"))\n", escapedExc)
+				fmt.Fprintf(&profile, "(allow file-read-data (subpath \"%s\"))\n", escapedExc)
+				fmt.Fprintf(&profile, "(allow file-read-data (literal \"%s\"))\n", escapedExc)
 			}
 		}
 	}
 
 	// Handle strict mode (explicit read allowlist)
 	if config.Strict {
-		profile.WriteString("(deny file-read*)\n")
+		// Use file-read-data instead of file-read* to allow stat/lstat (metadata)
+		// while blocking actual file content reads. This enables path resolution
+		// for tools like Node.js/npm that need to call lstat() on parent directories.
+		profile.WriteString("(deny file-read-data)\n")
+
+		// Allow reading root directory - required for process startup and path resolution
+		profile.WriteString("(allow file-read-data (literal \"/\"))\n")
 
 		// Emit read deny rules
 		for _, rule := range config.ReadRules {
@@ -101,8 +107,8 @@ func generateSandboxProfile(config *SandboxConfig) (string, error) {
 		for _, rule := range config.ReadRules {
 			if rule.Action == ActionAllow {
 				escapedPath := escapePathForSandbox(rule.Path)
-				fmt.Fprintf(&profile, "(allow file-read* (subpath \"%s\"))\n", escapedPath)
-				fmt.Fprintf(&profile, "(allow file-read* (literal \"%s\"))\n", escapedPath)
+				fmt.Fprintf(&profile, "(allow file-read-data (subpath \"%s\"))\n", escapedPath)
+				fmt.Fprintf(&profile, "(allow file-read-data (literal \"%s\"))\n", escapedPath)
 			}
 		}
 
@@ -110,8 +116,8 @@ func generateSandboxProfile(config *SandboxConfig) (string, error) {
 		for _, rule := range config.WriteRules {
 			if rule.Action == ActionAllow {
 				escapedPath := escapePathForSandbox(rule.Path)
-				fmt.Fprintf(&profile, "(allow file-read* (subpath \"%s\"))\n", escapedPath)
-				fmt.Fprintf(&profile, "(allow file-read* (literal \"%s\"))\n", escapedPath)
+				fmt.Fprintf(&profile, "(allow file-read-data (subpath \"%s\"))\n", escapedPath)
+				fmt.Fprintf(&profile, "(allow file-read-data (literal \"%s\"))\n", escapedPath)
 			}
 		}
 
@@ -120,8 +126,8 @@ func generateSandboxProfile(config *SandboxConfig) (string, error) {
 			if rule.Action == ActionDeny {
 				for _, exc := range rule.Except {
 					escapedExc := escapePathForSandbox(exc)
-					fmt.Fprintf(&profile, "(allow file-read* (subpath \"%s\"))\n", escapedExc)
-					fmt.Fprintf(&profile, "(allow file-read* (literal \"%s\"))\n", escapedExc)
+					fmt.Fprintf(&profile, "(allow file-read-data (subpath \"%s\"))\n", escapedExc)
+					fmt.Fprintf(&profile, "(allow file-read-data (literal \"%s\"))\n", escapedExc)
 				}
 			}
 		}
@@ -130,11 +136,23 @@ func generateSandboxProfile(config *SandboxConfig) (string, error) {
 	return profile.String(), nil
 }
 
-// emitDenyRule emits a deny rule for the specified access mode
+// emitDenyRule emits a deny rule for the specified access mode.
+//
+// For read denies, we use file-read-data instead of file-read* to allow
+// stat/lstat operations (file-read-metadata) while blocking actual file content reads.
+// This is necessary because tools like Node.js/npm need to call lstat() on parent
+// directories during path resolution, even for paths they don't need to read.
+//
+// Security model with file-read-data:
+//   - stat/lstat (metadata): ALLOWED - needed for path resolution
+//   - readdir (ls): BLOCKED - can't enumerate directory contents
+//   - read (cat): BLOCKED - can't read file contents
 func emitDenyRule(profile *bytes.Buffer, rule ResolvedRule, mode AccessMode) {
 	modeStr := "file-write*"
 	if mode == AccessRead {
-		modeStr = "file-read*"
+		// Use file-read-data instead of file-read* to allow stat/lstat
+		// while still blocking actual file content reads
+		modeStr = "file-read-data"
 	}
 
 	if rule.IsGlob {

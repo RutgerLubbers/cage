@@ -17,9 +17,11 @@
 - Path deduplication in `--show-preset` output
 - Homebrew installation instructions in README
 - GPG signing support task/documentation (`docs/todo/GPG_SIGNING_SUPPORT.md`)
+- Documentation for macOS sandbox internals (`docs/MACOS_SANDBOX_INTERNALS.md`)
 
 ### Fixed
 - Suppress noisy `--allow-git` warning when not in a git repository (expected case)
+- **macOS**: Use `file-read-data` instead of `file-read*` for deny rules to allow `stat`/`lstat` operations while still blocking file content reads. This fixes compatibility with Node.js/npm which need metadata access for path resolution.
 
 ### Changed
 - Simplified permission model: only `deny`+`except`, `allow`, and `read` options
