@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.4.0](https://github.com/RutgerLubbers/cage/compare/v0.3.0...v0.4.0) - 2026-01-07
+
+### Added
+- Documentation for macOS sandbox internals (`docs/MACOS_SANDBOX_INTERNALS.md`)
+- Rule resolution system with conflict detection for allow/deny rules
+
+### Fixed
+- **macOS**: Use `file-read-data` instead of `file-read*` for deny rules to allow `stat`/`lstat` operations while still blocking file content reads. This fixes compatibility with Node.js/npm which need metadata access for path resolution.
+- Suppress noisy `--allow-git` warning when not in a git repository (expected case)
+
 ## [v0.3.0](https://github.com/RutgerLubbers/cage/compare/v0.2.0...v0.3.0) - 2026-01-07
 
 ### Breaking Changes
@@ -17,11 +27,6 @@
 - Path deduplication in `--show-preset` output
 - Homebrew installation instructions in README
 - GPG signing support task/documentation (`docs/todo/GPG_SIGNING_SUPPORT.md`)
-- Documentation for macOS sandbox internals (`docs/MACOS_SANDBOX_INTERNALS.md`)
-
-### Fixed
-- Suppress noisy `--allow-git` warning when not in a git repository (expected case)
-- **macOS**: Use `file-read-data` instead of `file-read*` for deny rules to allow `stat`/`lstat` operations while still blocking file content reads. This fixes compatibility with Node.js/npm which need metadata access for path resolution.
 
 ### Changed
 - Simplified permission model: only `deny`+`except`, `allow`, and `read` options
