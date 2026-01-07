@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 Unreleased changes are tracked in the `[Unreleased]` section at the top.
 
-## [Unreleased]
+## [v0.5.0](https://github.com/RutgerLubbers/cage/compare/v0.4.0...v0.5.0) - 2026-01-07
 
 ### Added
 - `builtin:secure-home` preset now includes read-only access to `~/.config/cage` to allow loading custom preset files
