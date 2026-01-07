@@ -4,7 +4,6 @@ package main
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 )
 
@@ -28,16 +27,11 @@ func showDryRun(config *SandboxConfig) error {
 			fmt.Println("  * Keychain directories (-allow-keychain)")
 		}
 
-		for _, path := range config.AllowedPaths {
-			absPath, err := filepath.Abs(path)
-			if err != nil {
-				absPath = path
+		// Show write allow rules
+		for _, rule := range config.WriteRules {
+			if rule.Action == ActionAllow {
+				fmt.Printf("  * %s (%s)\n", rule.Path, formatRuleSource(rule))
 			}
-			source := "user specified"
-			if config.AllowGit && strings.Contains(path, ".git") {
-				source = "-allow-git"
-			}
-			fmt.Printf("  * %s (%s)\n", absPath, source)
 		}
 
 		if config.Strict {
@@ -45,38 +39,62 @@ func showDryRun(config *SandboxConfig) error {
 			fmt.Println("- STRICT MODE: Deny all file reads by default")
 			fmt.Println("- Allow reads to:")
 
-			for _, path := range config.ReadPaths {
-				absPath, err := filepath.Abs(path)
-				if err != nil {
-					absPath = path
+			for _, rule := range config.ReadRules {
+				if rule.Action == ActionAllow {
+					fmt.Printf("  * %s (%s)\n", rule.Path, formatRuleSource(rule))
 				}
-				fmt.Printf("  * %s\n", absPath)
 			}
 		}
 
-		if len(config.DenyRules) > 0 {
-			fmt.Println()
-			fmt.Println("- Deny rules:")
-			for _, rule := range config.DenyRules {
-				modeStr := ""
-				switch rule.Modes {
-				case AccessRead:
-					modeStr = "read"
-				case AccessWrite:
-					modeStr = "write"
-				case AccessReadWrite:
-					modeStr = "read+write"
+		// Show deny rules
+		hasDenyRules := false
+		for _, rule := range config.WriteRules {
+			if rule.Action == ActionDeny {
+				if !hasDenyRules {
+					fmt.Println()
+					fmt.Println("- Deny rules:")
+					hasDenyRules = true
 				}
-				absPath, err := filepath.Abs(rule.Pattern)
-				if err != nil {
-					absPath = rule.Pattern
-				}
-				globNote := ""
-				if rule.IsGlob {
-					globNote = " (glob pattern)"
-				}
-				fmt.Printf("  * %s (%s)%s\n", absPath, modeStr, globNote)
+				printDenyRule(rule)
 			}
+		}
+		for _, rule := range config.ReadRules {
+			if rule.Action == ActionDeny {
+				if !hasDenyRules {
+					fmt.Println()
+					fmt.Println("- Deny rules:")
+					hasDenyRules = true
+				}
+				printDenyRule(rule)
+			}
+		}
+	}
+
+	// Show conflicts if any
+	if len(config.Conflicts) > 0 {
+		fmt.Println()
+		fmt.Println("Rule Conflicts:")
+		fmt.Println("----------------------------------------")
+		for _, conflict := range config.Conflicts {
+			conflictType := "Cross-preset"
+			if conflict.IsSamePreset {
+				conflictType = "Intra-preset"
+			}
+			fmt.Printf("%s conflict for path: %s\n", conflictType, conflict.Path)
+			fmt.Println("  Conflicting rules:")
+			for _, rule := range conflict.Rules {
+				actionStr := "allow"
+				if rule.Action == ActionDeny {
+					actionStr = "deny"
+				}
+				fmt.Printf("    - %s %s (%s) from %s\n", actionStr, rule.Path, formatAccessMode(rule.Mode), formatRuleSource(rule))
+			}
+			actionStr := "allow"
+			if conflict.Resolution.Action == ActionDeny {
+				actionStr = "deny"
+			}
+			fmt.Printf("  Resolution: %s from %s (CLI > preset, allow > deny, specific > general)\n", actionStr, formatRuleSource(conflict.Resolution))
+			fmt.Println()
 		}
 	}
 
@@ -99,4 +117,38 @@ func showDryRun(config *SandboxConfig) error {
 	fmt.Println()
 
 	return nil
+}
+
+func formatRuleSource(rule ResolvedRule) string {
+	if rule.Source.IsCLI {
+		return "CLI flag"
+	}
+	if rule.Source.PresetName != "" {
+		return rule.Source.PresetName
+	}
+	return "preset"
+}
+
+func formatAccessMode(mode AccessMode) string {
+	switch mode {
+	case AccessRead:
+		return "read"
+	case AccessWrite:
+		return "write"
+	case AccessReadWrite:
+		return "read+write"
+	default:
+		return "unknown"
+	}
+}
+
+func printDenyRule(rule ResolvedRule) {
+	globNote := ""
+	if rule.IsGlob {
+		globNote = " (glob pattern)"
+	}
+	fmt.Printf("  * %s (%s)%s - from %s\n", rule.Path, formatAccessMode(rule.Mode), globNote, formatRuleSource(rule))
+	for _, exc := range rule.Except {
+		fmt.Printf("    except: %s\n", exc)
+	}
 }

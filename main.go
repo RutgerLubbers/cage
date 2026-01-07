@@ -413,24 +413,27 @@ func main() {
 		flags.presets = append(config.Defaults.Presets, flags.presets...)
 	}
 
-	// Merge preset paths with command-line paths
-	allowedPaths := flags.allowPaths
+	// Create a RuleResolver instance
+	resolver := NewRuleResolver()
+
+	// Add CLI rules first
+	cliSource := RuleSource{IsCLI: true}
+	for _, path := range flags.allowPaths {
+		resolver.AddAllowRule(path, cliSource)
+	}
+	for _, path := range flags.allowRead {
+		resolver.AddReadRule(path, cliSource)
+	}
+	for _, path := range flags.deny {
+		resolver.AddDenyRule(os.ExpandEnv(path), nil, cliSource)
+	}
+
+	// Track global settings from presets
 	allowKeychain := flags.allowKeychain
 	allowGit := flags.allowGit
 	strict := flags.strict
-	readPaths := flags.allowRead
-	var denyRules []DenyRule
 
-	// Add deny rules from command-line flags
-	for _, path := range flags.deny {
-		denyRules = append(denyRules, DenyRule{
-			Pattern: os.ExpandEnv(path),
-			Modes:   AccessReadWrite,
-			IsGlob:  strings.Contains(path, "*"),
-		})
-	}
-
-	// Process each preset and merge their settings
+	// Process each preset and add their rules
 	for _, presetName := range flags.presets {
 		resolved, err := config.ResolvePreset(presetName, nil)
 		if err != nil {
@@ -445,24 +448,30 @@ func main() {
 			os.Exit(1)
 		}
 
-		// Add preset paths
+		// Validate preset for internal conflicts
+		presetSource := RuleSource{PresetName: presetName}
+
+		// Add preset rules to resolver first, then validate
 		for _, path := range processedPreset.Allow {
-			allowedPaths = append(allowedPaths, path.Path)
+			resolver.AddAllowRule(path.Path, presetSource)
 		}
-
-		// Add preset read paths
 		for _, path := range processedPreset.Read {
-			readPaths = append(readPaths, path.Path)
+			resolver.AddReadRule(path.Path, presetSource)
+		}
+		for _, path := range processedPreset.Deny {
+			resolver.AddDenyRule(path.Path, path.Except, presetSource)
 		}
 
-		// Add preset deny rules
-		for _, path := range processedPreset.Deny {
-			denyRules = append(denyRules, DenyRule{
-				Pattern: path.Path,
-				Modes:   AccessReadWrite,
-				IsGlob:  strings.Contains(path.Path, "*"),
-				Except:  path.Except,
-			})
+		// Validate for intra-preset conflicts
+		validationErrors := resolver.ValidatePreset(presetName)
+		for _, err := range validationErrors {
+			ruleErr := err.(*RuleError)
+			if ruleErr.Type == ErrorConflict {
+				fmt.Fprintf(os.Stderr, "cage: error: preset '%s' has conflicting rules for %s\n", presetName, ruleErr.Path)
+				os.Exit(1)
+			} else if ruleErr.Type == ErrorDuplicate {
+				fmt.Fprintf(os.Stderr, "cage: warning: preset '%s' has duplicate allow/deny for %s\n", presetName, ruleErr.Path)
+			}
 		}
 
 		// Preset's settings are ORed with command-line flags
@@ -471,15 +480,38 @@ func main() {
 		strict = strict || processedPreset.Strict
 	}
 
+	// Add git common directory if enabled
+	if allowGit {
+		gitCommonDir, err := getGitCommonDir()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "cage: warning: --allow-git: %v\n", err)
+		} else if gitCommonDir != "" {
+			resolver.AddAllowRule(gitCommonDir, RuleSource{PresetName: "-allow-git"})
+		}
+	}
+
+	// Resolve all rules and detect conflicts
+	writeRules, readRules, conflicts := resolver.Resolve()
+
+	// Count and warn about cross-preset conflicts
+	crossPresetConflicts := 0
+	for _, conflict := range conflicts {
+		if !conflict.IsSamePreset {
+			crossPresetConflicts++
+		}
+	}
+	if crossPresetConflicts > 0 {
+		fmt.Fprintf(os.Stderr, "cage: warning: %d cross-preset conflicts resolved (use --dry-run to see details)\n", crossPresetConflicts)
+	}
+
 	// Create sandbox configuration
 	sandboxConfig := &SandboxConfig{
 		AllowAll:      flags.allowAll,
 		AllowKeychain: allowKeychain,
-		AllowGit:      allowGit,
-		AllowedPaths:  allowedPaths,
 		Strict:        strict,
-		ReadPaths:     readPaths,
-		DenyRules:     denyRules,
+		WriteRules:    writeRules,
+		ReadRules:     readRules,
+		Conflicts:     conflicts,
 		Command:       args[0],
 		Args:          args[1:],
 	}

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"syscall"
 )
@@ -40,11 +39,15 @@ func generateSandboxProfile(config *SandboxConfig) (string, error) {
 		return profile.String(), nil
 	}
 
+	// Deny all file writes by default
 	profile.WriteString("(deny file-write*)\n")
+
+	// Allow system temporary directories
 	profile.WriteString(
 		`(allow file-write* (regex #"^/private/var/folders/[^/]+/[^/]+/(C|T|0)($|/)"))` + "\n",
 	)
 
+	// Allow keychain access if requested
 	if config.AllowKeychain {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
@@ -53,83 +56,94 @@ func generateSandboxProfile(config *SandboxConfig) (string, error) {
 		fmt.Fprintf(&profile, `(allow file-write* (subpath "%s/Library/Keychains"))`+"\n", homeDir)
 	}
 
-	for _, path := range config.AllowedPaths {
-		absPath, err := filepath.Abs(path)
-		if err != nil {
-			absPath = path
-		}
-		escapedPath := escapePathForSandbox(absPath)
-
-		fmt.Fprintf(&profile, "(allow file-write* (subpath \"%s\"))\n", escapedPath)
-		fmt.Fprintf(&profile, "(allow file-write* (literal \"%s\"))\n", escapedPath)
-	}
-
-	if config.Strict {
-		profile.WriteString("(deny file-read*)\n")
-
-		for _, path := range config.ReadPaths {
-			absPath, err := filepath.Abs(path)
-			if err != nil {
-				absPath = path
+	// Emit write deny rules first (sorted alphabetically, grouped by directory)
+	for _, rule := range config.WriteRules {
+		if rule.Action == ActionDeny {
+			emitDenyRule(&profile, rule, AccessWrite)
+			if rule.Mode&AccessRead != 0 {
+				emitDenyRule(&profile, rule, AccessRead)
 			}
-			escapedPath := escapePathForSandbox(absPath)
-			fmt.Fprintf(&profile, "(allow file-read* (subpath \"%s\"))\n", escapedPath)
-			fmt.Fprintf(&profile, "(allow file-read* (literal \"%s\"))\n", escapedPath)
-		}
-
-		for _, path := range config.AllowedPaths {
-			absPath, err := filepath.Abs(path)
-			if err != nil {
-				absPath = path
-			}
-			escapedPath := escapePathForSandbox(absPath)
-			fmt.Fprintf(&profile, "(allow file-read* (subpath \"%s\"))\n", escapedPath)
-			fmt.Fprintf(&profile, "(allow file-read* (literal \"%s\"))\n", escapedPath)
 		}
 	}
 
-	for _, rule := range config.DenyRules {
-		if rule.Modes&AccessRead != 0 {
-			if rule.IsGlob {
-				regexPattern := globToSBPLRegex(rule.Pattern)
-				fmt.Fprintf(&profile, "(deny file-read* (regex #\"%s\"))\n", regexPattern)
-			} else {
-				absPath, err := filepath.Abs(rule.Pattern)
-				if err != nil {
-					absPath = rule.Pattern
-				}
-				escapedPath := escapePathForSandbox(absPath)
-				fmt.Fprintf(&profile, "(deny file-read* (subpath \"%s\"))\n", escapedPath)
-			}
-			// Emit allows for exceptions (carve-outs) - these come after deny so they win
+	// Emit write allow rules (more specific, so they come after denies)
+	for _, rule := range config.WriteRules {
+		if rule.Action == ActionAllow {
+			escapedPath := escapePathForSandbox(rule.Path)
+			fmt.Fprintf(&profile, "(allow file-write* (subpath \"%s\"))\n", escapedPath)
+			fmt.Fprintf(&profile, "(allow file-write* (literal \"%s\"))\n", escapedPath)
+		}
+	}
+
+	// Emit read carve-outs from deny rules (exceptions restore read access)
+	for _, rule := range config.WriteRules {
+		if rule.Action == ActionDeny {
 			for _, exc := range rule.Except {
-				absExc, err := filepath.Abs(exc)
-				if err != nil {
-					absExc = exc
-				}
-				escapedExc := escapePathForSandbox(absExc)
+				escapedExc := escapePathForSandbox(exc)
 				fmt.Fprintf(&profile, "(allow file-read* (subpath \"%s\"))\n", escapedExc)
 				fmt.Fprintf(&profile, "(allow file-read* (literal \"%s\"))\n", escapedExc)
 			}
 		}
-		if rule.Modes&AccessWrite != 0 {
-			if rule.IsGlob {
-				regexPattern := globToSBPLRegex(rule.Pattern)
-				fmt.Fprintf(&profile, "(deny file-write* (regex #\"%s\"))\n", regexPattern)
-			} else {
-				absPath, err := filepath.Abs(rule.Pattern)
-				if err != nil {
-					absPath = rule.Pattern
-				}
-				escapedPath := escapePathForSandbox(absPath)
-				fmt.Fprintf(&profile, "(deny file-write* (subpath \"%s\"))\n", escapedPath)
+	}
+
+	// Handle strict mode (explicit read allowlist)
+	if config.Strict {
+		profile.WriteString("(deny file-read*)\n")
+
+		// Emit read deny rules
+		for _, rule := range config.ReadRules {
+			if rule.Action == ActionDeny {
+				emitDenyRule(&profile, rule, AccessRead)
 			}
-			// Note: exceptions (carve-outs) only restore READ access, not write.
-			// Use explicit 'allow:' paths to grant write access.
+		}
+
+		// Emit read allow rules
+		for _, rule := range config.ReadRules {
+			if rule.Action == ActionAllow {
+				escapedPath := escapePathForSandbox(rule.Path)
+				fmt.Fprintf(&profile, "(allow file-read* (subpath \"%s\"))\n", escapedPath)
+				fmt.Fprintf(&profile, "(allow file-read* (literal \"%s\"))\n", escapedPath)
+			}
+		}
+
+		// Write-allowed paths also need read access
+		for _, rule := range config.WriteRules {
+			if rule.Action == ActionAllow {
+				escapedPath := escapePathForSandbox(rule.Path)
+				fmt.Fprintf(&profile, "(allow file-read* (subpath \"%s\"))\n", escapedPath)
+				fmt.Fprintf(&profile, "(allow file-read* (literal \"%s\"))\n", escapedPath)
+			}
+		}
+
+		// Emit read carve-outs from read deny rules
+		for _, rule := range config.ReadRules {
+			if rule.Action == ActionDeny {
+				for _, exc := range rule.Except {
+					escapedExc := escapePathForSandbox(exc)
+					fmt.Fprintf(&profile, "(allow file-read* (subpath \"%s\"))\n", escapedExc)
+					fmt.Fprintf(&profile, "(allow file-read* (literal \"%s\"))\n", escapedExc)
+				}
+			}
 		}
 	}
 
 	return profile.String(), nil
+}
+
+// emitDenyRule emits a deny rule for the specified access mode
+func emitDenyRule(profile *bytes.Buffer, rule ResolvedRule, mode AccessMode) {
+	modeStr := "file-write*"
+	if mode == AccessRead {
+		modeStr = "file-read*"
+	}
+
+	if rule.IsGlob {
+		regexPattern := globToSBPLRegex(rule.Path)
+		fmt.Fprintf(profile, "(deny %s (regex #\"%s\"))\n", modeStr, regexPattern)
+	} else {
+		escapedPath := escapePathForSandbox(rule.Path)
+		fmt.Fprintf(profile, "(deny %s (subpath \"%s\"))\n", modeStr, escapedPath)
+	}
 }
 
 func escapePathForSandbox(path string) string {
@@ -139,19 +153,14 @@ func escapePathForSandbox(path string) string {
 }
 
 func globToSBPLRegex(pattern string) string {
-	absPattern, err := filepath.Abs(pattern)
-	if err != nil {
-		absPattern = pattern
-	}
-
 	var result strings.Builder
 	result.WriteString("^")
 
-	for i := 0; i < len(absPattern); i++ {
-		c := absPattern[i]
+	for i := 0; i < len(pattern); i++ {
+		c := pattern[i]
 		switch c {
 		case '*':
-			if i+1 < len(absPattern) && absPattern[i+1] == '*' {
+			if i+1 < len(pattern) && pattern[i+1] == '*' {
 				result.WriteString(".*")
 				i++
 			} else {

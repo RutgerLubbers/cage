@@ -96,7 +96,6 @@ presets:
       - "/Applications"
       - "/Library"
       - "/System"
-      - "/private/var"
       - "/private/var/folders"
 
       # Unix standard paths
@@ -137,7 +136,6 @@ presets:
       - "$HOME/.m2"
       - "$HOME/.gradle"
       - "$HOME/.java"
-      - "target"
       - "build"
 
   # Write access for Go development (additive - use with builtin:secure or --allow .)
