@@ -25,12 +25,14 @@ func showDryRun(config *SandboxConfig) error {
 			fmt.Println("- STRICT MODE: Only explicit read paths are allowed")
 			fmt.Println("- Allow read access to:")
 
-			for _, path := range config.ReadPaths {
-				absPath, err := filepath.Abs(path)
-				if err != nil {
-					absPath = path
+			for _, rule := range config.ReadRules {
+				if rule.Action == ActionAllow {
+					absPath, err := filepath.Abs(rule.Path)
+					if err != nil {
+						absPath = rule.Path
+					}
+					fmt.Printf("  * %s\n", absPath)
 				}
-				fmt.Printf("  * %s\n", absPath)
 			}
 		} else {
 			fmt.Println("- Allow read access to all files")
@@ -39,24 +41,42 @@ func showDryRun(config *SandboxConfig) error {
 		fmt.Println("- Deny write access except to:")
 		fmt.Println("  * /dev/null (for discarding output)")
 
-		for _, path := range config.AllowedPaths {
-			absPath, err := filepath.Abs(path)
-			if err != nil {
-				absPath = path
+		for _, rule := range config.WriteRules {
+			if rule.Action == ActionAllow {
+				absPath, err := filepath.Abs(rule.Path)
+				if err != nil {
+					absPath = rule.Path
+				}
+				// Determine the source of the rule
+				source := "user specified"
+				if rule.Source.IsCLI {
+					source = "command line"
+				} else if rule.Source.PresetName != "" {
+					source = rule.Source.PresetName
+				}
+				fmt.Printf("  * %s (%s)\n", absPath, source)
 			}
-			source := "user specified"
-			if config.AllowGit && strings.Contains(path, ".git") {
-				source = "-allow-git"
-			}
-			fmt.Printf("  * %s (%s)\n", absPath, source)
 		}
 
-		if len(config.DenyRules) > 0 {
+		// Collect all deny rules from both read and write rules
+		denyRules := []ResolvedRule{}
+		for _, rule := range config.ReadRules {
+			if rule.Action == ActionDeny {
+				denyRules = append(denyRules, rule)
+			}
+		}
+		for _, rule := range config.WriteRules {
+			if rule.Action == ActionDeny {
+				denyRules = append(denyRules, rule)
+			}
+		}
+
+		if len(denyRules) > 0 {
 			fmt.Println()
 			fmt.Println("- Deny rules:")
-			for _, rule := range config.DenyRules {
+			for _, rule := range denyRules {
 				modeStr := ""
-				switch rule.Modes {
+				switch rule.Mode {
 				case AccessRead:
 					modeStr = "read"
 				case AccessWrite:
@@ -64,12 +84,12 @@ func showDryRun(config *SandboxConfig) error {
 				case AccessReadWrite:
 					modeStr = "read+write"
 				}
-				absPath, err := filepath.Abs(rule.Pattern)
+				absPath, err := filepath.Abs(rule.Path)
 				if err != nil {
-					absPath = rule.Pattern
+					absPath = rule.Path
 				}
 				note := ""
-				if rule.Modes&AccessRead != 0 {
+				if rule.Mode&AccessRead != 0 {
 					if rule.IsGlob {
 						note = " (WARNING: glob patterns not supported on Linux)"
 					} else {

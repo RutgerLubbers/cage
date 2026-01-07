@@ -8,6 +8,7 @@
 
 ### Fixed
 - **macOS**: Use `file-read-data` instead of `file-read*` for deny rules to allow `stat`/`lstat` operations while still blocking file content reads. This fixes compatibility with Node.js/npm which need metadata access for path resolution.
+- **Linux**: Update sandbox files to use new SandboxConfig structure with ReadRules/WriteRules
 - Suppress noisy `--allow-git` warning when not in a git repository (expected case)
 
 ## [v0.3.0](https://github.com/RutgerLubbers/cage/compare/v0.2.0...v0.3.0) - 2026-01-07
