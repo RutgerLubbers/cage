@@ -75,11 +75,12 @@ func modifySandboxConfig(config *SandboxConfig) {
 	if config.AllowGit {
 		gitCommonDir, err := getGitCommonDir()
 		if err != nil {
-			// Log the error but don't fail - the directory might not be a git repo
-			fmt.Fprintf(os.Stderr, "warning: %v\n", err)
-		} else {
+			// Only warn on unexpected errors (not "not a git repo")
+			fmt.Fprintf(os.Stderr, "warning: --allow-git: %v\n", err)
+		} else if gitCommonDir != "" {
 			pathSet[gitCommonDir] = struct{}{}
 		}
+		// If gitCommonDir is empty, we're not in a git repo - silently ignore
 	}
 
 	config.AllowedPaths = slices.Sorted(maps.Keys(pathSet))

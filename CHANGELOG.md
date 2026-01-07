@@ -18,6 +18,9 @@
 - Homebrew installation instructions in README
 - GPG signing support task/documentation (`docs/todo/GPG_SIGNING_SUPPORT.md`)
 
+### Fixed
+- Suppress noisy `--allow-git` warning when not in a git repository (expected case)
+
 ### Changed
 - Simplified permission model: only `deny`+`except`, `allow`, and `read` options
 - `builtin:secure` is now the comprehensive preset for AI coding assistants

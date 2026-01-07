@@ -255,11 +255,16 @@ func expandEnvOnly(path string) string {
 
 // getGitCommonDir returns the git common directory for the current repository
 // This is useful for git worktrees where the .git directory is a file pointing to the common dir
+// Returns empty string and nil error if not in a git repository (expected case)
 func getGitCommonDir() (string, error) {
 	cmd := exec.Command("git", "rev-parse", "--git-common-dir")
 	output, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("failed to get git common directory: %w", err)
+		// Exit code 128 means "not a git repository" - this is expected, not an error
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 128 {
+			return "", nil
+		}
+		return "", fmt.Errorf("git common directory lookup failed: %w", err)
 	}
 	// Trim newline from output
 	return strings.TrimSpace(string(output)), nil
