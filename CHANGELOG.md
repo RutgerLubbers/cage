@@ -1,5 +1,17 @@
 # Changelog
 
+All notable changes to this project will be documented in this file.
+
+Unreleased changes are tracked in the `[Unreleased]` section at the top.
+
+## [Unreleased]
+
+### Added
+- `builtin:secure-home` preset now includes read-only access to `~/.config/cage` to allow loading custom preset files
+
+### Fixed
+- **Critical**: Fix duplicate deny rules in `--dry-run` output and sandbox profiles. `AccessReadWrite` deny rules were incorrectly appearing twice due to faulty conditional logic in rule resolution and profile generation.
+
 ## [v0.4.0](https://github.com/RutgerLubbers/cage/compare/v0.3.0...v0.4.0) - 2026-01-07
 
 ### Added
@@ -7,7 +19,6 @@
 - Rule resolution system with conflict detection for allow/deny rules
 
 ### Fixed
-- **Critical**: Fix duplicate deny rules in `--dry-run` output and sandbox profiles. `AccessReadWrite` deny rules were incorrectly appearing twice due to faulty conditional logic in rule resolution and profile generation.
 - **macOS**: Use `file-read-data` instead of `file-read*` for deny rules to allow `stat`/`lstat` operations while still blocking file content reads. This fixes compatibility with Node.js/npm which need metadata access for path resolution.
 - **Linux**: Update sandbox files to use new SandboxConfig structure with ReadRules/WriteRules
 - Suppress noisy `--allow-git` warning when not in a git repository (expected case)
