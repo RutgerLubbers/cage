@@ -88,6 +88,9 @@ presets:
           - "$HOME/.vimrc"
           - "$HOME/.config/nvim"
 
+          # Cage config (read-only)
+          - "$HOME/.config/cage"
+
   # Minimal system read access with strict mode enabled
   strict-base:
     strict: true
